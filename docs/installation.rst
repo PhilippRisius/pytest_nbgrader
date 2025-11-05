@@ -47,11 +47,11 @@ The sources for pytest nbgrader plugin can be downloaded from the `Github repo`_
 
             git clone git@github.com:PhilippRisius/pytest_nbgrader_plugin.git
 
-    * Download the `tarball <https://github.com/PhilippRisius/pytest-nbgrader-plugin/tarball/main>`_:
+    * Download the `tarball <https://github.com/PhilippRisius/pytest_nbgrader/tarball/main>`_:
 
         .. code-block:: console
 
-            curl -OJL https://github.com/PhilippRisius/pytest-nbgrader-plugin/tarball/main
+            curl -OJL https://github.com/PhilippRisius/pytest_nbgrader/tarball/main
 
 #. Once you have a copy of the source, you can install it with:
 
@@ -96,4 +96,4 @@ The sources for pytest nbgrader plugin can be downloaded from the `Github repo`_
 
     These commands should work most of the time, but if big changes are made to the repository, you might need to remove the environment and create it again.
 
-.. _Github repo: https://github.com/PhilippRisius/pytest-nbgrader-plugin
+.. _Github repo: https://github.com/PhilippRisius/pytest_nbgrader

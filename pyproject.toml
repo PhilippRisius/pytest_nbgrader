@@ -65,14 +65,14 @@ docs = [
   "sphinx-intl",
   "sphinx-rtd-theme >=1.0"
 ]
-all = ["pytest-nbgrader-plugin[dev]", "pytest-nbgrader-plugin[docs]"]
+all = ["pytest_nbgrader[dev]", "pytest_nbgrader[docs]"]
 
 [project.urls]
 # "Homepage" = "https://pytest nbgrader plugin.readthedocs.io/"
 # "Changelog" = "https://pytest nbgrader plugin.readthedocs.io/en/stable/changelog.html"
 # "About Ouranos" = "https://ouranos.ca/en/"
-"Issue tracker" = "https://github.com/PhilippRisius/pytest-nbgrader-plugin/issues"
-"Source" = "https://github.com/PhilippRisius/pytest-nbgrader-plugin"
+"Issue tracker" = "https://github.com/PhilippRisius/pytest_nbgrader/issues"
+"Source" = "https://github.com/PhilippRisius/pytest_nbgrader"
 
 [tool]
 

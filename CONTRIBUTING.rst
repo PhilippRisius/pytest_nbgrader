@@ -12,7 +12,7 @@ Types of Contributions
 Report Bugs
 ~~~~~~~~~~~
 
-Report bugs at https://github.com/PhilippRisius/pytest-nbgrader-plugin/issues.
+Report bugs at https://github.com/PhilippRisius/pytest_nbgrader/issues.
 
 If you are reporting a bug, please include:
 
@@ -38,7 +38,7 @@ pytest nbgrader plugin could always use more documentation, whether as part of t
 Submit Feedback
 ~~~~~~~~~~~~~~~
 
-The best way to send feedback is to file an issue at https://github.com/PhilippRisius/pytest-nbgrader-plugin/issues.
+The best way to send feedback is to file an issue at https://github.com/PhilippRisius/pytest_nbgrader/issues.
 
 If you are proposing a feature:
 
@@ -61,13 +61,13 @@ Ready to contribute? Here's how to set up ``pytest nbgrader plugin`` for local d
 
         .. code-block:: console
 
-            git clone git@github.com:your_name_here/pytest-nbgrader-plugin.git
+            git clone git@github.com:your_name_here/pytest_nbgrader.git
 
     * If you are a ``pytest nbgrader plugin`` collaborator, clone the ``pytest nbgrader plugin`` repo directly.
 
         .. code-block:: console
 
-            git clone git@github.com:PhilippRisius/pytest-nbgrader-plugin.git
+            git clone git@github.com:PhilippRisius/pytest_nbgrader.git
 
 #. Install your local copy into a development environment. Using ``virtualenv`` (``virtualenvwrapper``), you can create a new development environment with:
 
@@ -221,5 +221,5 @@ This will create or update the French translation files in the `docs/locales/fr/
 Code of Conduct
 ---------------
 
-Please note that this project is released with a `Contributor Code of Conduct <https://github.com/PhilippRisius/pytest-nbgrader-plugin/blob/main/CODE_OF_CONDUCT.md>`_.
+Please note that this project is released with a `Contributor Code of Conduct <https://github.com/PhilippRisius/pytest_nbgrader/blob/main/CODE_OF_CONDUCT.md>`_.
 By participating in this project you agree to abide by its terms.
