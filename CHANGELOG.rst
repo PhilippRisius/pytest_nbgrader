@@ -4,7 +4,7 @@ Changelog
 
 ..
 
-    `v0.1.2 <https://github.com/PhilippRisius/pytest_nbgrader/tree/0.1.2>`_ (latest)
+    test (latest)
     --------------------------------------------------------------------------------
 
     Contributors:
@@ -19,7 +19,7 @@ Changelog
 
     .. _changes_0.1.0:
 
-    `v0.1.0 <https://github.com/PhilippRisius/pytest_nbgrader/tree/0.1.0>`_
+    first
     -----------------------------------------------------------------------
 
 Contributors: Philipp Emmo Tobias Risius (:user:`PhilippRisius`)
