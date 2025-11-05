@@ -1,0 +1,323 @@
+[build-system]
+requires = ["flit_core >=3.11.0,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "pytest_nbgrader"
+authors = [
+  {name = "Philipp Emmo Tobias Risius", email = "philipp.e.risius@theo.physik.uni-giessen.de"}
+]
+maintainers = [
+  {name = "Philipp Emmo Tobias Risius", email = "philipp.e.risius@theo.physik.uni-giessen.de"}
+]
+readme = {file = "README.rst", content-type = "text/x-rst"}
+requires-python = ">=3.10.0"
+keywords = ["pytest nbgrader plugin"]
+license = "MIT"
+license-files = ["LICENSE"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "Natural Language :: English",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Typing :: Typed"
+]
+dynamic = ["description", "version"]
+dependencies = [
+]
+
+[project.optional-dependencies]
+dev = [
+  # Dev tools and testing
+  "bump-my-version >=1.2.3",
+  "coverage >=7.5.0",
+  "deptry >=0.23.1",
+  "flake8 >=7.3.0",
+  "flake8-rst-docstrings >=0.3.1",
+  "flit >=3.12.0,<4.0",
+  "mypy >=1.18.2",
+  "numpydoc >=1.9.0",
+  "pip >=25.2",
+  "pre-commit >=3.5.0",
+  "pytest >=8.3.2",
+  "pytest-cov >=5.0.0",
+  "ruff >=0.13.3",
+  "tox >=4.30.3",
+  "vulture >=2.14",
+  "watchdog >=4.0.0"
+]
+docs = [
+  # Documentation and examples
+  "ipykernel",
+  "ipython",
+  "jupyter_client",
+  "nbsphinx >=0.9.5",
+  "sphinx >=7.1.0,<8.2",
+  "sphinx-codeautolink >=0.16.2",
+  "sphinx-copybutton",
+  "sphinx-intl",
+  "sphinx-rtd-theme >=1.0"
+]
+all = ["pytest-nbgrader-plugin[dev]", "pytest-nbgrader-plugin[docs]"]
+
+[project.urls]
+# "Homepage" = "https://pytest nbgrader plugin.readthedocs.io/"
+# "Changelog" = "https://pytest nbgrader plugin.readthedocs.io/en/stable/changelog.html"
+# "About Ouranos" = "https://ouranos.ca/en/"
+"Issue tracker" = "https://github.com/PhilippRisius/pytest-nbgrader-plugin/issues"
+"Source" = "https://github.com/PhilippRisius/pytest-nbgrader-plugin"
+
+[tool]
+
+[tool.bumpversion]
+current_version = "0.1.0"
+commit = true
+commit_args = "--no-verify"
+tag = false
+tag_name = "v{new_version}"
+allow_dirty = true
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)(\\-(?P<release>[a-z]+)(\\.(?P<build>\\d+)))?"
+serialize = [
+  "{major}.{minor}.{patch}-{release}.{build}",
+  "{major}.{minor}.{patch}"
+]
+
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.rst"
+include_bumps = ["release"]
+search = """\
+`Unreleased <https://github.com/PhilippRisius/pytest_nbgrader>`_ (latest)
+-------------------------------------------------------------------------
+"""
+replace = """\
+..
+    `Unreleased <https://github.com/PhilippRisius/pytest_nbgrader>`_ (latest)
+    -------------------------------------------------------------------------
+
+    Contributors:
+
+    Changes
+    ^^^^^^^
+    * No change.
+
+    Fixes
+    ^^^^^
+    * No change.
+
+.. _changes_{new_version}:
+
+`v{new_version} <https://github.com/PhilippRisius/pytest_nbgrader/tree/{new_version}>`_ ({now:%Y-%m-%d})
+----------------------------------------------------------------------------------------
+"""
+
+[[tool.bumpversion.files]]
+filename = "src/pytest_nbgrader/__init__.py"
+search = "__version__ = \"{current_version}\""
+replace = "__version__ = \"{new_version}\""
+
+[[tool.bumpversion.files]]
+filename = "tests/test_pytest_nbgrader.py"
+search = "__version__ = \"{current_version}\""
+replace = "__version__ = \"{new_version}\""
+
+[tool.bumpversion.parts.build]
+independent = false
+
+[tool.bumpversion.parts.release]
+optional_value = "release"
+values = [
+  "dev",
+  "release"
+]
+
+[tool.codespell]
+ignore-words-list = "astroid,socio-economic"
+
+[tool.coverage.paths]
+source = ["src/pytest_nbgrader/", "*/site-packages/pytest_nbgrader/"]
+
+[tool.coverage.run]
+omit = ["tests/*.py"]
+relative_files = true
+source = ["pytest_nbgrader"]
+
+[tool.deptry]
+extend_exclude = ["docs"]
+pep621_dev_dependency_groups = ["all", "dev", "docs"]
+
+[tool.flit.sdist]
+include = [
+  ".zenodo.json",
+  "AUTHORS.rst",
+  "CHANGELOG.rst",
+  "CONTRIBUTING.rst",
+  "LICENSE",
+  "Makefile",
+  "README.rst",
+  "environment-docs.yml",
+  "docs/_static/_images/*.gif",
+  "docs/_static/_images/*.jpg",
+  "docs/_static/_images/*.png",
+  "docs/_static/_images/*.rst",
+  "docs/Makefile",
+  "docs/conf.py",
+  "docs/make.bat",
+  "src/pytest_nbgrader",
+  "tests/*.py",
+  "tox.ini"
+]
+exclude = [
+  "*.py[co]",
+  "__pycache__",
+  ".coveralls.yml",
+  ".editorconfig",
+  ".flake8",
+  ".gitignore",
+  ".pre-commit-config.yaml",
+  ".readthedocs.yml",
+  ".yamllint.yaml",
+  ".zizmor.yml",
+  "docs/_*",
+  "docs/apidoc/modules.rst",
+  "docs/apidoc/pytest_nbgrader*.rst",
+  "docs/locales"
+]
+
+[tool.mypy]
+files = "."
+python_version = "3.10"
+show_error_codes = true
+strict = true
+warn_no_return = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = [
+  # Don't require test functions to include types
+  "tests.*"
+]
+allow_untyped_defs = true
+disable_error_code = "attr-defined"
+ignore_missing_imports = true
+
+[tool.numpydoc_validation]
+checks = [
+  "all", # report on all checks, except the below
+  "EX01",
+  "SA01",
+  "ES01"
+]
+# remember to use single quotes for regex in TOML
+exclude = [
+  # don't report on objects that match any of these regex
+  '\.undocumented_method$',
+  '\.__repr__$'
+]
+override_SS05 = [
+  # override SS05 to allow docstrings starting with these words
+  '^Process ',
+  '^Assess ',
+  '^Access '
+]
+
+[tool.pytest.ini_options]
+addopts = [
+  "-ra",
+  "--color=yes",
+  "--verbose"
+]
+filterwarnings = ["ignore::UserWarning"]
+testpaths = [
+  "tests"
+]
+
+[tool.ruff]
+src = ["pytest_nbgrader"]
+line-length = 150
+exclude = [
+  ".eggs",
+  ".git",
+  "build",
+  "docs"
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = "dynamic"
+indent-style = "space"
+quote-style = "double"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+extend-select = [
+  "D213", # multi-line-summary-second-line
+  "RUF022" # unsorted-dunder-all
+]
+ignore = [
+  "COM", # commas
+  "D205", # blank-line-after-summary
+  "D400", # ends-in-period
+  "D401" # non-imperative-mood
+]
+preview = true
+select = [
+  "B", # bugbear
+  "BLE", # blind-except
+  "C90", # mccabe-complexity
+  "D", # docstrings
+  "E", # pycodestyle errors
+  "F", # pyflakes
+  "FLY002", # static-join-to-fstring
+  "G", # logging-format
+  "I", # imports
+  "N", # naming conventions
+  "PERF", # iterator performance
+  "PTH", # pathlib
+  "RUF010", # explicit-f-string-type-conversion
+  "RUF013", # implicit-optional
+  "S", # bandit
+  "UP", # python version conventions
+  "W" # pycodestyle warnings
+]
+
+[tool.ruff.lint.flake8-bandit]
+check-typed-exception = true
+
+[tool.ruff.lint.isort]
+known-first-party = ["pytest_nbgrader"]
+case-sensitive = true
+detect-same-package = false
+lines-after-imports = 2
+no-lines-before = ["future", "standard-library"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.per-file-ignores]
+"docs/**" = ["E402"]
+"src/pytest_nbgrader/**/__init__.py" = ["F401", "F403"]
+"tests/**" = ["D100", "D101", "D102", "D103", "S101"]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 180
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.vulture]
+exclude = []
+ignore_decorators = ["@pytest.fixture"]
+ignore_names = []
+min_confidence = 90
+paths = ["src/pytest_nbgrader", "tests"]
+sort_by_size = true
