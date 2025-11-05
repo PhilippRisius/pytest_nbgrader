@@ -4,8 +4,8 @@ Changelog
 
 ..
 
-    `Unreleased <https://github.com/PhilippRisius/pytest_nbgrader>`_ (latest)
-    -------------------------------------------------------------------------
+    `v0.1.2 <https://github.com/PhilippRisius/pytest_nbgrader/tree/0.1.2>`_ (latest)
+    --------------------------------------------------------------------------------
 
     Contributors:
 
