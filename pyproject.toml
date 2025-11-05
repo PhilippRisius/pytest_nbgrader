@@ -77,7 +77,7 @@ all = ["pytest-nbgrader-plugin[dev]", "pytest-nbgrader-plugin[docs]"]
 [tool]
 
 [tool.bumpversion]
-current_version = "0.1.1-dev.0"
+current_version = "0.1.2-dev.0"
 commit = true
 commit_args = "--no-verify"
 tag = false
