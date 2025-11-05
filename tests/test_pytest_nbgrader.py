@@ -39,4 +39,4 @@ def test_package_metadata():
         contents = f.read()
         assert """Philipp Emmo Tobias Risius""" in contents
         assert '__email__ = "philipp.e.risius@theo.physik.uni-giessen.de"' in contents
-        assert '__version__ = "0.2.0-dev.0"' in contents
+        assert '__version__ = "0.2.1-dev.0"' in contents
