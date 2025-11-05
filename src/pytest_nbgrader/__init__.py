@@ -26,4 +26,4 @@
 
 __author__ = """Philipp Emmo Tobias Risius"""
 __email__ = "philipp.e.risius@theo.physik.uni-giessen.de"
-__version__ = "0.1.2-dev.0"
+__version__ = "0.1.1-dev.0"
