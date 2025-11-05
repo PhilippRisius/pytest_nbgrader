@@ -34,8 +34,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@6da8fa9354ddfdc4aeace5fc48d7f679b5214090 # 2.4.1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DRAFT_RELEASE_TOKEN: ${{ secrets.DRAFT_RELEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.DRAFT_RELEASE_TOKEN }}
 
         with:
           tag_name: ${{ github.ref_name }}
