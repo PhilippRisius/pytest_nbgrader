@@ -55,8 +55,8 @@ autodoc_default_options = {
 }
 
 extlinks = {
-    "issue": ("https://github.com/PhilippRisius/pytest-nbgrader-plugin/issues/%s", "GH/%s"),
-    "pull": ("https://github.com/PhilippRisius/pytest-nbgrader-plugin/pull/%s", "PR/%s"),
+    "issue": ("https://github.com/PhilippRisius/pytest_nbgrader/issues/%s", "GH/%s"),
+    "pull": ("https://github.com/PhilippRisius/pytest_nbgrader/pull/%s", "PR/%s"),
     "user": ("https://github.com/%s", "@%s"),
 }
 

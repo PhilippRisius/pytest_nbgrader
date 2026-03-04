@@ -61,7 +61,7 @@ From the command line on your Linux distribution, simply run the following from 
         # To upload to PyPI
         make release
 
-The new version based off of the version checked out will now be available via `pip` (`pip install pytest-nbgrader-plugin`).
+The new version based off of the version checked out will now be available via `pip` (`pip install pytest-nbgrader`).
 
 Releasing on conda-forge
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,13 +78,13 @@ In order to create a new conda build recipe, to be used when proposing packages 
    .. code-block:: console
 
         python -m pip install grayskull
-        grayskull pypi pytest-nbgrader-plugin
+        grayskull pypi pytest-nbgrader
 
 For more information on `grayskull`, please see the following link: https://github.com/conda/grayskull
 
 Before updating the main conda-forge recipe, we echo the conda-forge documentation and *strongly* suggest performing the following checks:
  * Ensure that dependencies and dependency versions correspond with those of the tagged version, with open or pinned versions for the `host` requirements.
- * If possible, configure tests within the conda-forge build CI (e.g. `imports: pytest_nbgrader`, `commands: pytest pytest-nbgrader-plugin`).
+ * If possible, configure tests within the conda-forge build CI (e.g. `imports: pytest_nbgrader`, `commands: pytest pytest-nbgrader`).
 
 Subsequent releases
 ^^^^^^^^^^^^^^^^^^^
