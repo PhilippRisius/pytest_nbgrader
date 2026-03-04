@@ -26,11 +26,13 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: Implementation :: CPython",
   "Typing :: Typed"
 ]
 dynamic = ["description", "version"]
 dependencies = [
+  "pytest >=8"
 ]
 
 [project.optional-dependencies]
@@ -73,6 +75,9 @@ all = ["pytest_nbgrader[dev]", "pytest_nbgrader[docs]"]
 # "About Ouranos" = "https://ouranos.ca/en/"
 "Issue tracker" = "https://github.com/PhilippRisius/pytest_nbgrader/issues"
 "Source" = "https://github.com/PhilippRisius/pytest_nbgrader"
+
+[project.entry-points."pytest11"]
+pytest-nbgrader = "pytest_nbgrader.pytest_nbgrader"
 
 [tool]
 
@@ -126,6 +131,11 @@ replace = "__version__ = \"{new_version}\""
 filename = "tests/test_pytest_nbgrader.py"
 search = "__version__ = \"{current_version}\""
 replace = "__version__ = \"{new_version}\""
+
+[[tool.bumpversion.files]]
+filename = "CITATION.cff"
+search = "version: \"{current_version}\""
+replace = "version: \"{new_version}\""
 
 [tool.bumpversion.parts.build]
 independent = false
