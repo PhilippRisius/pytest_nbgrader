@@ -1,5 +1,5 @@
 """
-pytest configuration module
+Pytest configuration module.
 
 pytest internals:
   pytest_addoption -- add custom options to test a single subtask at a time
@@ -21,7 +21,14 @@ import pytest_nbgrader
 
 
 def pytest_addoption(parser):
-    """Add custom options"""
+    """
+    Add custom options for test case location and auto-generation.
+
+    Parameters
+    ----------
+    parser : _pytest.config.argparsing.Parser
+        The pytest argument parser.
+    """
     parser.addoption(
         "--cases",
         action="store",
@@ -39,7 +46,14 @@ def pytest_addoption(parser):
 
 
 def pytest_sessionstart(session):
-    """Collect manual and automatic test cases."""
+    """
+    Collect manual and automatic test cases.
+
+    Parameters
+    ----------
+    session : pytest.Session
+        The pytest session object.
+    """
     import yaml
 
     # TODO: Collect yaml files with pytest_collection instead
@@ -63,13 +77,27 @@ def pytest_sessionstart(session):
 
 
 def pytest_sessionfinish(session):
-    """At session finish, unlink the previously generated tests file."""
+    """
+    Unlink the previously generated tests file at session finish.
+
+    Parameters
+    ----------
+    session : pytest.Session
+        The pytest session object.
+    """
     if isinstance(session.config.option.auto, pathlib.Path):
         session.config.option.auto.unlink()
 
 
 def pytest_generate_tests(metafunc):
-    """Programmatically generate tests from deserialized test cases"""
+    """
+    Programmatically generate tests from deserialized test cases.
+
+    Parameters
+    ----------
+    metafunc : pytest.Metafunc
+        The metafunc object for parametrizing test functions.
+    """
     cases = metafunc.config.getoption("test_cases")
     if cases:
         for fixture in ["prerequisites", "assertions", "cases"]:
@@ -85,11 +113,30 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture
 def verbosity(request):
-    """Inject verbosity from global config."""
+    """
+    Inject verbosity from global config.
+
+    Parameters
+    ----------
+    request : pytest.FixtureRequest
+        The pytest fixture request object.
+
+    Returns
+    -------
+    int
+        The verbosity level.
+    """
     return request.config.getoption("verbose")
 
 
 @pytest.fixture
 def submission():
-    """Inject submission object into pytest as fixture."""
+    """
+    Inject submission object into pytest as fixture.
+
+    Returns
+    -------
+    object
+        The stored student submission.
+    """
     return pytest_nbgrader.loader.Submission.submission

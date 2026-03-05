@@ -33,12 +33,44 @@ def _log(
     assertion,
     name: str = "",
 ):
-    """Log failures and successes of running assertions."""
+    """
+    Log failures and successes of running assertions.
+
+    Parameters
+    ----------
+    assertion : callable
+        The assertion function to wrap with logging.
+    name : str, optional
+        Display name for log messages, by default uses ``assertion.__name__``.
+
+    Returns
+    -------
+    callable
+        Wrapped assertion function that logs results.
+    """
     name = f'Assertion "{name or assertion.__name__}"'
 
     @functools.wraps(assertion)
     def wrapper(case, outputs, *args, **kwargs):
-        """Append a message to the test result."""
+        """
+        Append a message to the test result.
+
+        Parameters
+        ----------
+        case : TestCase
+            Test case with expected outputs.
+        outputs : tuple
+            Actual outputs from student submission.
+        *args : tuple
+            Positional arguments forwarded to the assertion.
+        **kwargs : dict
+            Keyword arguments forwarded to the assertion.
+
+        Returns
+        -------
+        tuple
+            A ``(result, message)`` pair.
+        """
         result = assertion(case, outputs, *args, **kwargs)
         if result is pytest.ExitCode.OK:
             logging.debug(f"{name} succeeded:\nExpected: {case.expected}\nActual: {outputs}\n")
@@ -54,7 +86,25 @@ def _log(
 
 @_log
 def close_attributes(case: TestCase, outputs, *args, **kwargs):
-    """Assert close values for given attributes between expected and outputs."""
+    """
+    Assert close values for given attributes between expected and outputs.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case with expected outputs.
+    outputs : object
+        Actual output object whose attributes are compared.
+    *args : str
+        Attribute names to compare.
+    **kwargs : dict
+        Tolerances forwarded to ``np.testing.assert_allclose``.
+
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` on success, or a failure tuple.
+    """
     try:
         expected_attrs, output_attrs = ([getattr(instance, attribute) for attribute in args] for instance in (case.expected, outputs))
         np.testing.assert_allclose(expected_attrs, output_attrs, **kwargs)
@@ -65,14 +115,46 @@ def close_attributes(case: TestCase, outputs, *args, **kwargs):
 
 @_log
 def has_import(case: TestCase, *args, **kwargs) -> Enum:
-    """Test if an object has a module-level import."""
+    """
+    Test if an object has a module-level import.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case whose ``return_object`` is inspected.
+    *args : pathlib.Path
+        Expected import paths to check.
+    **kwargs : pathlib.Path or None
+        Mapping of object names to expected import paths (None = locally defined).
+
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if all imports match, otherwise ``pytest.ExitCode.TESTS_FAILED``.
+    """
     # TODO: collect results and yield a suitable return message
     #       with all discrepancies.
 
     import pathlib
 
     def invalid_import(name, expected=None, actual=None):
-        """Format message for warning about invalid imports"""
+        """
+        Format message for warning about invalid imports.
+
+        Parameters
+        ----------
+        name : str
+            Name of the import.
+        expected : str or None, optional
+            Expected import location.
+        actual : str or None, optional
+            Actual import location.
+
+        Returns
+        -------
+        str
+            Formatted warning message.
+        """
         message = f"{name} was not imported"
         if expected or actual:
             expected = expected or "locally defined"
@@ -137,7 +219,23 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
 
 
 def equal_attributes(case: TestCase, *args, **kwargs) -> Enum:
-    """Test if all attributes of expected and actual return object are equal."""
+    """
+    Test if all attributes of expected and actual return object are equal.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case with ``return_object`` and ``expected_object``.
+    *args : str
+        Attribute names to compare.
+    **kwargs : dict
+        Unused keyword arguments.
+
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if equal, otherwise ``pytest.ExitCode.TESTS_FAILED``.
+    """
     result = None
 
     if all(getattr(case.return_object, attr) == getattr(case.expected_object, attr) for attr in args):
@@ -147,7 +245,24 @@ def equal_attributes(case: TestCase, *args, **kwargs) -> Enum:
 
 
 def has_method(case: TestCase, *args, **kwargs) -> Enum:
-    """Test if return object of TestCase has a given method"""
+    """
+    Test if return object of TestCase has a given method.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case whose ``return_object`` is inspected.
+    *args : str
+        Attribute names that must exist on the return object.
+    **kwargs : dict
+        Mapping of attribute names to expected type hints.
+
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if all methods exist with correct types,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
+    """
     result = None
 
     if all(hasattr(case.return_object, attribute) for attribute in args):
@@ -163,7 +278,23 @@ def has_method(case: TestCase, *args, **kwargs) -> Enum:
 
 
 def calls(case: TestCase, caller, **callees):
-    """Test if function 'caller' of imported module calls callees in the prescribed manner."""
+    """
+    Test if function 'caller' of imported module calls callees in the prescribed manner.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case whose ``outputs[0][0]`` is the module or class under test.
+    caller : str
+        Name of the function to call on the object.
+    **callees : list of tuple
+        Mapping of callee names to lists of ``(args, kwargs)`` expected call tuples.
+
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if all calls match, otherwise a failure tuple.
+    """
     from contextlib import ExitStack
     from unittest.mock import call, patch
 
@@ -191,15 +322,24 @@ def calls(case: TestCase, caller, **callees):
 @_log
 def equal_contents(case, outputs, *args, **kwargs) -> Enum:
     """
-    Test if containers have the same elements, piecewise between actual and expected TestCase outputs.
+    Test if containers have equal contents between actual and expected outputs.
 
-    case -- TestCase with expected outputs.
-    outputs -- actual outputs from a student submission.
-    args -- list of variable names which hold containers to be tested.
+    Parameters
+    ----------
+    case : TestCase
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs from student submission.
+    *args : str
+        Variable names which hold containers to be tested.
+    **kwargs : dict
+        Unused keyword arguments.
 
-    Return pytest.ExitCode.OK if all pairs of containers have equal contents, else pytest.ExitCode.TESTS_FAILED.
-    Containers may have different types, but the contents must be same.
-    Order must be respected iff expected output is an ordered type.
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if all pairs of containers have equal contents,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
     # TODO: Collect unequal results in a sensible manner.
     # Upon completion, return (code, expected, actual)
@@ -229,15 +369,28 @@ def equal_contents(case, outputs, *args, **kwargs) -> Enum:
 @_log
 def almost_equal(case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, **kwargs) -> Enum:
     """
-    Test for closeness, up to tolerance epsilon, between actual and expected TestCase outputs.
+    Test for closeness between actual and expected TestCase outputs.
 
-    epsilon -- relative tolerance for equality testing.
-    case -- TestCase with expected outputs.
-    outputs -- actual outputs from a student submission.
-    args -- list of variable names for which near equality is tested.
+    Parameters
+    ----------
+    case : TestCase
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs from student submission.
+    *args : str
+        Variable names for which near equality is tested.
+    atol : float, optional
+        Absolute tolerance, by default 1e-7.
+    rtol : float, optional
+        Relative tolerance, by default 1e-7.
+    **kwargs : dict
+        Unused keyword arguments.
 
-    Return pytest.ExitCode.OK if all values of the case are equal up to epsilon, else pytest.ExitCode.TESTS_FAILED.
-    Fall back to strict equality testing for non-numeric types.
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if all values are equal up to tolerance,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
     import itertools
 
@@ -265,7 +418,26 @@ def almost_equal(case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, *
 
 @_log
 def raises(case, outputs, *args, **kwargs) -> Enum:
-    """Test if case raised an exception as prescribed."""
+    """
+    Test if case raised an exception as prescribed.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case with ``raises`` flag indicating expected exception.
+    outputs : tuple or Exception
+        Actual outputs or raised exception from student submission.
+    *args : type
+        Exception types that are expected to be raised.
+    **kwargs : dict
+        Unused keyword arguments.
+
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if the expected exception was raised,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
+    """
     result = None
     if case.raises:
         logging.debug(f"Execution is expected to raise {args}")
@@ -277,13 +449,22 @@ def raises(case, outputs, *args, **kwargs) -> Enum:
 @_log
 def file_contents(case: TestCase, *args, **kwargs) -> Enum:
     """
-    Test if files in Testcase.expected[1] have the prescribed contents.
+    Test if files in TestCase.expected[1] have the prescribed contents.
 
     Parameters
     ----------
-      case -- TestCaseFunction with filenames: expected contents
+    case : TestCase
+        Test case with ``expected[1]`` mapping filenames to expected contents.
+    *args : tuple
+        Unused positional arguments.
+    **kwargs : dict
+        Unused keyword arguments.
 
-    Return pytest.ExitCode.OK if contents of files are bitwise identical, else pytest.ExitCode.TESTS_FAILED.
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if contents are bitwise identical,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
     result = None
 
@@ -303,14 +484,24 @@ def file_contents(case: TestCase, *args, **kwargs) -> Enum:
 @_log
 def equal_value(case, outputs, *args, **kwargs) -> Enum:
     """
-    Test for exact equality between variables *args of expected outputs of a TestCase and actual outputs.
+    Test for exact equality between expected and actual TestCase outputs.
 
-    case -- TestCase with expected outputs.
-    outputs -- actual outputs from a student submission
-    args -- list of variables for which exact equality is tested.
+    Parameters
+    ----------
+    case : TestCase
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs from student submission.
+    *args : str
+        Variable names for which exact equality is tested.
+    **kwargs : dict
+        Unused keyword arguments.
 
-    Return pytest.ExitCode.OK if all values stored under variable names from args are exactly equal.
-    Else, return pytest.ExitCode.TESTS_FAILED.
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if all values are exactly equal,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
     result = None
     import itertools
@@ -330,14 +521,24 @@ def equal_value(case, outputs, *args, **kwargs) -> Enum:
 @_log
 def equal_types(case, outputs, *args, **kwargs) -> Enum:
     """
-    Test for equal types between variables *args of expected outputs of a TestCase and actual outputs.
+    Test for equal types between expected and actual TestCase outputs.
 
-    case -- TestCase with expected outputs.
-    outputs -- actual outputs from a student submission.
-    args -- list of variables to check.
+    Parameters
+    ----------
+    case : TestCase
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs from student submission.
+    *args : str
+        Variable names to check.
+    **kwargs : dict
+        Unused keyword arguments.
 
-    Return pytest.ExitCode.OK if all values stored under variable names from args have equal types.
-    Else, return pytest.ExitCode.TESTS_FAILED.
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if all values have equal types,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
     result = None
 
@@ -352,13 +553,24 @@ def equal_types(case, outputs, *args, **kwargs) -> Enum:
 @_log
 def equal_scope(case, outputs, *args, **kwargs) -> Enum:
     """
-    Test for equal scope expected outputs of a TestCase and actual outputs.
+    Test for equal scope between expected and actual TestCase outputs.
 
-    case -- TestCase with expected outputs.
-    outputs -- actual outputs from a student submission.
+    Parameters
+    ----------
+    case : TestCase
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs from student submission.
+    *args : tuple
+        Unused positional arguments.
+    **kwargs : dict
+        Unused keyword arguments.
 
-    Return pytest.ExitCode.OK if case.expected and outputs have equal variables.
-    Else, return pytest.ExitCode.TESTS_FAILED.
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if expected and actual have equal variable names,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
     result = None
 
@@ -372,7 +584,26 @@ def equal_scope(case, outputs, *args, **kwargs) -> Enum:
 
 @_log
 def time_bounds(case, outputs, *args, **kwargs) -> Enum:
-    """Test for execution time within bounds, if provided"""
+    """
+    Test for execution time within bounds, if provided.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case with ``timing`` tuple of ``(lower, upper)`` bounds.
+    outputs : tuple
+        Actual outputs; ``outputs[2]`` is the execution time.
+    *args : tuple
+        Unused positional arguments.
+    **kwargs : dict
+        Unused keyword arguments.
+
+    Returns
+    -------
+    Enum
+        ``pytest.ExitCode.OK`` if execution time is within bounds,
+        otherwise ``pytest.ExitCode.TESTS_FAILED``.
+    """
     result = None
     execution_time = outputs[2]
 

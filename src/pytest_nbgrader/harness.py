@@ -12,7 +12,16 @@ class TestClass:
 
     @pytest.mark.tryfirst
     def test_prerequisites(cls, submission, prerequisites) -> None:
-        """Run prerequisites tests against student submission."""
+        """
+        Run prerequisites tests against student submission.
+
+        Parameters
+        ----------
+        submission : object
+            The student submission under test.
+        prerequisites : tuple
+            A ``(function, (args, kwargs))`` pair for the prerequisite check.
+        """
         function, (args, kwargs) = prerequisites
         if function(submission, *args, **kwargs) is not pytest.ExitCode.OK:
             pytest.fail(
@@ -25,7 +34,23 @@ class TestClass:
 
     @pytest.fixture
     def test_execution(cls, submission, cases, verbosity) -> tuple:
-        """Run student submission on test cases."""
+        """
+        Run student submission on test cases.
+
+        Parameters
+        ----------
+        submission : object
+            The student submission to execute.
+        cases : TestCase
+            Test case with inputs and expected outputs.
+        verbosity : int
+            Verbosity level for output formatting.
+
+        Returns
+        -------
+        tuple
+            A ``(case, result)`` pair.
+        """
         try:
             result = execute(submission, cases)
         except Exception as e:
@@ -43,7 +68,18 @@ class TestClass:
         return cases, result
 
     def test_assertion(cls, test_execution, assertions, verbosity) -> None:
-        """Run assertions against results of test execution (pytest fixture)."""
+        """
+        Run assertions against results of test execution.
+
+        Parameters
+        ----------
+        test_execution : tuple
+            A ``(case, outputs)`` pair from the ``test_execution`` fixture.
+        assertions : tuple
+            A ``(function, (args, kwargs))`` pair for the assertion check.
+        verbosity : int
+            Verbosity level for output formatting.
+        """
         case, outputs = test_execution
         function, (args, kwargs) = assertions
         try:
