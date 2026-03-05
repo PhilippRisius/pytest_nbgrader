@@ -1,32 +1,32 @@
 import pathlib
+
 import pytest
-from pytest_nbgrader import conftest, loader, harness
+
+from pytest_nbgrader import conftest, harness, loader
 
 
-def main(
-    *args, task=None, subtask=None, case_dir='tests', auto=True, **kwargs
-):
+def main(*args, task=None, subtask=None, case_dir="tests", auto=True, **kwargs):
     """Wrap around pytest to inject test cases and set up config"""
     # ensure existence of submission
     assert loader.Submission.submission
 
-    pytest_args = ['-p', 'no:pytest-nbgrader']
+    pytest_args = ["-p", "no:pytest-nbgrader"]
 
     if subtask is not None:
-        cases = pathlib.Path(case_dir) / (task or '') / f'{subtask}.yml'
-        assert cases.is_file(), 'Test cases could not be found.'
-        pytest_args.append(f'--{cases=!s}')
+        cases = pathlib.Path(case_dir) / (task or "") / f"{subtask}.yml"
+        assert cases.is_file(), "Test cases could not be found."
+        pytest_args.append(f"--{cases=!s}")
 
     pytest_args.extend(args)
 
     if auto:
-        pytest_args.append('harness.py::TestClass')
+        pytest_args.append("harness.py::TestClass")
 
     with TemporarySymlinks(conftest, harness):
         return pytest.main(pytest_args, **kwargs)
 
 
-class TemporarySymlink(object):
+class TemporarySymlink:
     def __init__(self, module, destination=None):
         self.module = module
         if destination is None:
@@ -44,11 +44,9 @@ class TemporarySymlink(object):
             self.path.unlink()
 
 
-class TemporarySymlinks(object):
+class TemporarySymlinks:
     def __init__(self, *args, **kwargs):
-        self.symlinks = [TemporarySymlink(module) for module in args] + [
-            TemporarySymlink(v, destination=k) for k, v in kwargs.items()
-        ]
+        self.symlinks = [TemporarySymlink(module) for module in args] + [TemporarySymlink(v, destination=k) for k, v in kwargs.items()]
 
     def __enter__(self):
         for symlink in self.symlinks:

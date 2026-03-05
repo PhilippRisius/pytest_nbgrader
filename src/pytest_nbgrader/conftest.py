@@ -1,4 +1,5 @@
-"""pytest configuration module
+"""
+pytest configuration module
 
 pytest internals:
   pytest_addoption -- add custom options to test a single subtask at a time
@@ -12,26 +13,28 @@ PYTEST_DONT_REWRITE
 """
 
 import pathlib
-import pytest
-import pytest_nbgrader
 import warnings
+
+import pytest
+
+import pytest_nbgrader
 
 
 def pytest_addoption(parser):
     """Add custom options"""
     parser.addoption(
-        '--cases',
-        action='store',
-        dest='cases',
+        "--cases",
+        action="store",
+        dest="cases",
         default=None,
-        help='specify location of test cases in yml format',
+        help="specify location of test cases in yml format",
     )
     parser.addoption(
-        '--noauto',
-        action='store_false',
-        dest='auto',
+        "--noauto",
+        action="store_false",
+        dest="auto",
         default=True,
-        help='Do not generate tests with pytest-nbgrader',
+        help="Do not generate tests with pytest-nbgrader",
     )
 
 
@@ -40,18 +43,18 @@ def pytest_sessionstart(session):
     import yaml
 
     # TODO: Collect yaml files with pytest_collection instead
-    cases = session.config.getoption('cases')
+    cases = session.config.getoption("cases")
     if cases is not None:
         # load cases from yaml
-        assert pathlib.Path(cases).is_file(), f'{cases=} is not a file.'
-        with open(cases, 'rb') as f:
+        assert pathlib.Path(cases).is_file(), f"{cases=} is not a file."
+        with pathlib.Path(cases).open("rb") as f:
             test_cases = yaml.unsafe_load(f)
         session.config.option.test_cases = test_cases
 
         if session.config.option.auto:
             import uuid
 
-            test_file = pathlib.Path(f'test_auto_{uuid.uuid4()}.py')
+            test_file = pathlib.Path(f"test_auto_{uuid.uuid4()}.py")
             test_file.symlink_to(pytest_nbgrader.harness.__file__)
             session.config.option.auto = test_file
 
@@ -67,10 +70,9 @@ def pytest_sessionfinish(session):
 
 def pytest_generate_tests(metafunc):
     """Programmatically generate tests from deserialized test cases"""
-
-    cases = metafunc.config.getoption('test_cases')
+    cases = metafunc.config.getoption("test_cases")
     if cases:
-        for fixture in ['prerequisites', 'assertions', 'cases']:
+        for fixture in ["prerequisites", "assertions", "cases"]:
             if fixture in metafunc.fixturenames:
                 parameters = getattr(cases, fixture)
                 if isinstance(parameters, dict):
@@ -78,15 +80,13 @@ def pytest_generate_tests(metafunc):
                 metafunc.parametrize(fixture, parameters)
 
     else:
-        warnings.warn(
-            UserWarning('pytest-nbgrader: No data for automatic tests found.')
-        )
+        warnings.warn(UserWarning("pytest-nbgrader: No data for automatic tests found."))
 
 
 @pytest.fixture
 def verbosity(request):
     """Inject verbosity from global config."""
-    return request.config.getoption('verbose')
+    return request.config.getoption("verbose")
 
 
 @pytest.fixture

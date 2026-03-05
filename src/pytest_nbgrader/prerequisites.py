@@ -1,13 +1,14 @@
-"""Module for testing prerequisites a student's submission needs to fulfill.
+"""
+Module for testing prerequisites a student's submission needs to fulfill.
 
 Export functions for asserting properties of student code:
 - has_signature -- is a function compatible with the supplied signature?
 
 Might in the future test for static attributes or methods of classes
 """
-__version__ = '0.3'
 
-import importlib.machinery
+__version__ = "0.3"
+
 import importlib.util
 import inspect
 import io
@@ -16,22 +17,23 @@ from enum import Enum
 
 import pytest
 
+
 logger = logging.getLogger()
 
 
-def writes_file(
-    spec, *args, name=None, created=None, deleted=None, modified=None
-) -> Enum:
-    """Test file writes of module execution as `name`.
+def writes_file(spec, *args, name=None, created=None, deleted=None, modified=None) -> Enum:
+    """
+    Test file writes of module execution as `name`.
 
-    Parameters:
+    Parameters
+    ----------
       spec -- ModuleSpec to be executed
       name -- __name__ of module at execution time
     """
     import pathlib
 
     def recursive_stats(path: pathlib.Path, return_dict=None):
-        """recursively gather file paths and stats in subdirs"""
+        """Recursively gather file paths and stats in subdirs"""
         if return_dict is None:
             return_dict = {}
         if path.is_file():
@@ -46,14 +48,14 @@ def writes_file(
     module = importlib.util.module_from_spec(spec)
 
     if name is not None:
-        logger.debug(f'changing name to {name}')
+        logger.debug("changing name to %s", name)
         spec_name, spec.name = spec.name, name
         spec_loader_name, spec.loader.name = spec.loader.name, name
         module.__name__ = name
 
-    pre_exec_stats = recursive_stats(pathlib.Path('.'))
+    pre_exec_stats = recursive_stats(pathlib.Path())
     spec.loader.exec_module(module)
-    post_exec_stats = recursive_stats(pathlib.Path('.'))
+    post_exec_stats = recursive_stats(pathlib.Path())
 
     pre, post = set(pre_exec_stats.keys()), set(post_exec_stats.keys())
     created_files, deleted_files, shared_files = (
@@ -61,30 +63,24 @@ def writes_file(
         pre - post,
         pre & post,
     )
-    modified_files = {
-        file
-        for file in shared_files
-        if pre_exec_stats[file] != post_exec_stats[file]
-    }
+    modified_files = {file for file in shared_files if pre_exec_stats[file] != post_exec_stats[file]}
 
     for mode, expected, actual in [
-        ('created', created, created_files),
-        ('deleted', deleted, deleted_files),
-        ('modified', modified, modified_files),
+        ("created", created, created_files),
+        ("deleted", deleted, deleted_files),
+        ("modified", modified, modified_files),
     ]:
         if expected is not None:
             if expected != actual:
                 logger.warning(
-                    f'Test failed: module {mode} files'
-                    f' ({", ".join(map(str, actual))}),'
-                    ' but expected this exactly for files'
-                    f' ({", ".join(map(str, expected))})!'
+                    f"Test failed: module {mode} files"
+                    f" ({', '.join(map(str, actual))}),"
+                    " but expected this exactly for files"
+                    f" ({', '.join(map(str, expected))})!"
                 )
                 result = (pytest.ExitCode.TESTS_FAILED, expected, actual)
             else:
-                logger.debug(
-                    f'Test passed: module {mode} files {expected} as expected.'
-                )
+                logger.debug("Test passed: module %s files %s as expected.", mode, expected)
 
     if name is not None:
         spec.name, spec.loader.name = spec_name, spec_loader_name
@@ -93,9 +89,11 @@ def writes_file(
 
 
 def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
-    """Test stdout, stderr writes of module execution as `name`.
+    """
+    Test stdout, stderr writes of module execution as `name`.
 
-    Parameters:
+    Parameters
+    ----------
       spec -- ModuleSpec to be executed
       name -- __name__ of module at execution time
       out -- expected stdout, skipped if None
@@ -107,11 +105,11 @@ def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
     from contextlib import ExitStack, redirect_stderr, redirect_stdout
 
     def message(name, output, actual, expected):
-        """format message for warning."""
+        """Format message for warning."""
         return (
-            f'Importing the module {name} wrote'
-            f' {repr(actual) if actual else "nothing"} to {output},'
-            f' expected {repr(expected) if expected else "nothing"}'
+            f"Importing the module {name} wrote"
+            f" {repr(actual) if actual else 'nothing'} to {output},"
+            f" expected {repr(expected) if expected else 'nothing'}"
         )
 
     result = None
@@ -124,8 +122,8 @@ def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
         module.__name__ = name
 
     outputs = {
-        redirect_stdout: ('stdout', out, io.StringIO()),
-        redirect_stderr: ('stderr', err, io.StringIO()),
+        redirect_stdout: ("stdout", out, io.StringIO()),
+        redirect_stderr: ("stderr", err, io.StringIO()),
     }
 
     with ExitStack() as stack:
@@ -158,30 +156,24 @@ def has_signature(
     """Test if function is compatible with passed signature."""
 
     def invalid_signature(expected, actual):
-        """format message for warnings"""
-        return (
-            f'Function signature is not valid.\n{expected = },\n  {actual = }.'
-        )
+        """Format message for warnings"""
+        return f"Function signature is not valid.\n{expected = },\n  {actual = }."
 
     def pretty_par(par: inspect.Parameter) -> str:
-        """pretty formatting of function parameters"""
-        string = f'{par.kind.name} parameter <{par.name}'
+        """Pretty formatting of function parameters"""
+        string = f"{par.kind.name} parameter <{par.name}"
         if par.annotation is not inspect.Parameter.empty:
-            string += f': {par.annotation}'
+            string += f": {par.annotation}"
         if par.default is not inspect.Parameter.empty:
-            string += f' = {par.default}'
-        string += '>'
+            string += f" = {par.default}"
+        string += ">"
         return string
 
     fun_sig = inspect.signature(function)
     result = None
 
     if not compare_names(list(fun_sig.parameters), list(ref_sig.parameters)):
-        logger.warning(
-            invalid_signature(
-                list(ref_sig.parameters), list(fun_sig.parameters)
-            )
-        )
+        logger.warning(invalid_signature(list(ref_sig.parameters), list(fun_sig.parameters)))
         result = pytest.ExitCode.TESTS_FAILED
 
     for name, fun_par in fun_sig.parameters.items():
@@ -190,29 +182,20 @@ def has_signature(
             for attr in strict_comparisons:
                 comparisons[attr] = type(getattr(fun_par, attr)).__eq__
             for attr, comp in comparisons.items():
-                fun_value, ref_value = getattr(fun_par, attr), getattr(
-                    ref_par, attr
-                )
-                if not (comp(fun_value, ref_value) is True):
-                    logger.warning(
-                        invalid_signature(
-                            pretty_par(ref_par), pretty_par(fun_par)
-                        )
-                    )
+                fun_value, ref_value = getattr(fun_par, attr), getattr(ref_par, attr)
+                if comp(fun_value, ref_value) is not True:
+                    logger.warning(invalid_signature(pretty_par(ref_par), pretty_par(fun_par)))
                     result = pytest.ExitCode.TESTS_FAILED
 
-    if 'annotation' in strict_comparisons:
-        comparisons['annotation'] = type(ref_sig.return_annotation).__eq__
-    if 'annotation' in comparisons:
+    if "annotation" in strict_comparisons:
+        comparisons["annotation"] = type(ref_sig.return_annotation).__eq__
+    if "annotation" in comparisons:
         ref_return, fun_return = (
             ref_sig.return_annotation,
             fun_sig.return_annotation,
         )
-        if not (comparisons['annotation'](ref_return, fun_return) is True):
-            logger.warning(
-                'Return annotation of '
-                + invalid_signature(ref_return, fun_return)
-            )
+        if comparisons["annotation"](ref_return, fun_return) is not True:
+            logger.warning("Return annotation of " + invalid_signature(ref_return, fun_return))
             result = pytest.ExitCode.TESTS_FAILED
 
     return result or pytest.ExitCode.OK

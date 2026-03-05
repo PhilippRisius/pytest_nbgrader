@@ -1,7 +1,9 @@
 """Check submissions with pytest and fixtures."""
+
 import traceback
 
 import pytest
+
 from pytest_nbgrader.cases import execute, format_result
 
 
@@ -11,7 +13,6 @@ class TestClass:
     @pytest.mark.tryfirst
     def test_prerequisites(cls, submission, prerequisites) -> None:
         """Run prerequisites tests against student submission."""
-
         function, (args, kwargs) = prerequisites
         if function(submission, *args, **kwargs) is not pytest.ExitCode.OK:
             pytest.fail(
@@ -25,7 +26,6 @@ class TestClass:
     @pytest.fixture
     def test_execution(cls, submission, cases, verbosity) -> tuple:
         """Run student submission on test cases."""
-
         try:
             result = execute(submission, cases)
         except Exception as e:
@@ -44,7 +44,6 @@ class TestClass:
 
     def test_assertion(cls, test_execution, assertions, verbosity) -> None:
         """Run assertions against results of test execution (pytest fixture)."""
-
         case, outputs = test_execution
         function, (args, kwargs) = assertions
         try:

@@ -12,7 +12,8 @@ Export functions for asserting relations between student outputs and expected ou
 - equal_type -- Are output objects of expected types?
 - equal_scope -- Is the output scope as expected (i.e. same variables present)?
 """
-__version__ = '0.3'
+
+__version__ = "0.3"
 
 import functools
 import inspect
@@ -27,7 +28,7 @@ from pytest_nbgrader.cases import TestCase
 
 def _log(
     assertion,
-    name: str = '',
+    name: str = "",
 ):
     """Log failures and successes of running assertions."""
     name = f'Assertion "{name or assertion.__name__}"'
@@ -37,19 +38,11 @@ def _log(
         """Append a message to the test result."""
         result = assertion(case, outputs, *args, **kwargs)
         if result is pytest.ExitCode.OK:
-            logging.debug(
-                f'{name} succeeded:\n'
-                f'Expected: {case.expected}\n'
-                f'Actual: {outputs}\n'
-            )
-            message = ''
+            logging.debug(f"{name} succeeded:\nExpected: {case.expected}\nActual: {outputs}\n")
+            message = ""
         else:
             result, expect, actual = result
-            message = (
-                f'{name} failed with result {result}.\n'
-                f'Expected: {expect},\n'
-                f'Actual: {actual}.\n'
-            )
+            message = f"{name} failed with result {result}.\nExpected: {expect},\nActual: {actual}.\n"
 
         return result, message
 
@@ -61,10 +54,7 @@ def close_attributes(case: TestCase, outputs, *args, **kwargs):
     """assert close values for given attributes between expected and outputs."""
 
     try:
-        expected_attrs, output_attrs = (
-            [getattr(instance, attribute) for attribute in args]
-            for instance in (case.expected, outputs)
-        )
+        expected_attrs, output_attrs = ([getattr(instance, attribute) for attribute in args] for instance in (case.expected, outputs))
         np.testing.assert_allclose(expected_attrs, output_attrs, **kwargs)
         return pytest.ExitCode.OK
     except AssertionError:
@@ -81,12 +71,12 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
 
     def invalid_import(name, expected=None, actual=None):
         """format message for warning about invalid imports"""
-        message = f'{name} was not imported'
+        message = f"{name} was not imported"
         if expected or actual:
-            expected = expected or 'locally defined'
-            actual = actual or 'locally defined'
-            message += f' from expected location.\n expected: {expected}, actual: {actual}'
-        return message + '.'
+            expected = expected or "locally defined"
+            actual = actual or "locally defined"
+            message += f" from expected location.\n expected: {expected}, actual: {actual}"
+        return message + "."
 
     result = None
     cwd = pathlib.Path.cwd()
@@ -94,23 +84,17 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
     for expected in args:
         actual = inspect.getmodule(getattr(case.return_object, expected))
         if actual is None:
-            logging.warning(
-                invalid_import(expected.stem, expected, 'not imported')
-            )
+            logging.warning(invalid_import(expected.stem, expected, "not imported"))
             result = (
                 pytest.ExitCode.TESTS_FAILED,
                 expected.stem,
-                'not imported',
+                "not imported",
             )
         else:
             actual_name = actual.__spec__.name
-            actual_origin = pathlib.Path(actual.__spec__.origin).relative_to(
-                cwd
-            )
+            actual_origin = pathlib.Path(actual.__spec__.origin).relative_to(cwd)
             if (expected.stem, expected) != (actual_name, actual_origin):
-                logging.warning(
-                    invalid_import(expected.stem, expected, actual_origin)
-                )
+                logging.warning(invalid_import(expected.stem, expected, actual_origin))
                 result = (
                     pytest.ExitCode.TESTS_FAILED,
                     expected.stem,
@@ -121,32 +105,28 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
         actual = inspect.getmodule(getattr(case.return_object, obj))
         if actual is not None:
             actual_name = actual.__spec__.name
-            actual_origin = pathlib.Path(actual.__spec__.origin).relative_to(
-                cwd
-            )
+            actual_origin = pathlib.Path(actual.__spec__.origin).relative_to(cwd)
             if expected is None:
                 logging.warning(invalid_import(obj, None, actual_origin))
                 result = (
                     pytest.ExitCode.TESTS_FAILED,
-                    'locally defined',
+                    "locally defined",
                     actual_origin,
                 )
             elif (expected.stem, expected) != (actual_name, actual_origin):
                 logging.warning(invalid_import(obj, expected, actual_origin))
                 result = (
                     pytest.ExitCode.TESTS_FAILED,
-                    expected or 'locally defined',
+                    expected or "locally defined",
                 )
             else:
-                logging.debug(
-                    f'Test "{obj} imported from {expected.stem}" succeeded.'
-                )
+                logging.debug(f'Test "{obj} imported from {expected.stem}" succeeded.')
         elif expected is not None:
             logging.warning(invalid_import(obj, expected, None))
             result = (
                 pytest.ExitCode.TESTS_FAILED,
                 expected,
-                actual or 'locally defined',
+                actual or "locally defined",
             )
         else:
             logging.debug(f'Test "{obj} was locally defined" succeeded.')
@@ -159,11 +139,7 @@ def equal_attributes(case: TestCase, *args, **kwargs) -> Enum:
 
     result = None
 
-    if all(
-        getattr(case.return_object, attr)
-        == getattr(case.expected_object, attr)
-        for attr in args
-    ):
+    if all(getattr(case.return_object, attr) == getattr(case.expected_object, attr) for attr in args):
         result = pytest.ExitCode.TESTS_FAILED
 
     return result or pytest.ExitCode.OK
@@ -176,8 +152,7 @@ def has_method(case: TestCase, *args, **kwargs) -> Enum:
 
     if all(hasattr(case.return_object, attribute) for attribute in args):
         if not all(
-            hasattr(case.return_object, attribute)
-            and isinstance(getattr(case.return_object, attribute), type_hint)
+            hasattr(case.return_object, attribute) and isinstance(getattr(case.return_object, attribute), type_hint)
             for attribute, type_hint in kwargs.items()
         ):
             result = pytest.ExitCode.TESTS_FAILED
@@ -199,18 +174,11 @@ def calls(case: TestCase, caller, **callees):
     assert isinstance(obj, type) or isinstance(obj, types.ModuleType)
 
     with ExitStack() as stack:
-        calls = {
-            callee: stack.enter_context(
-                patch.object(obj, callee, wraps=getattr(obj, callee))
-            )
-            for callee in callees
-        }
+        calls = {callee: stack.enter_context(patch.object(obj, callee, wraps=getattr(obj, callee))) for callee in callees}
         getattr(obj, caller)()
 
     for callee, mock in calls.items():
-        expected_calls = [
-            call(*args, **kwargs) for args, kwargs in callees.get(callee)
-        ]
+        expected_calls = [call(*args, **kwargs) for args, kwargs in callees.get(callee)]
         if expected_calls != mock.mock_calls:
             result = (
                 pytest.ExitCode.TESTS_FAILED,
@@ -241,24 +209,14 @@ def equal_contents(case, outputs, *args, **kwargs) -> Enum:
     expected_args_types = [type(arg) for arg in case.expected[0]]
     expected_kwargs_types = [type(case.expected[1][key]) for key in args]
 
-    if any(
-        t(outputs[1][key]) != case.expected[1][key]
-        for key, t in zip(args, expected_kwargs_types)
-    ):
-        wrong_outputs = {
-            x: outputs[1][x] for x in outputs[1] if x in case.expected[1]
-        }
+    if any(t(outputs[1][key]) != case.expected[1][key] for key, t in zip(args, expected_kwargs_types)):
+        wrong_outputs = {x: outputs[1][x] for x in outputs[1] if x in case.expected[1]}
         result = (
             pytest.ExitCode.TESTS_FAILED,
             case.expected[1],
             wrong_outputs,
         )
-    if any(
-        t(value) != expected
-        for t, value, expected in zip(
-            expected_args_types, outputs[0], case.expected[0]
-        )
-    ):
+    if any(t(value) != expected for t, value, expected in zip(expected_args_types, outputs[0], case.expected[0])):
         result = (
             pytest.ExitCode.TESTS_FAILED,
             case.expected[0],
@@ -269,9 +227,7 @@ def equal_contents(case, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def almost_equal(
-    case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, **kwargs
-) -> Enum:
+def almost_equal(case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, **kwargs) -> Enum:
     """Test for closeness, up to tolerance epsilon, between actual and expected TestCase outputs.
 
     epsilon -- relative tolerance for equality testing.
@@ -296,11 +252,7 @@ def almost_equal(
             np.testing.assert_allclose(output, expect, atol=atol, rtol=rtol)
 
         except TypeError:
-            logging.info(
-                f'Cannot test item {index} for near equality.\n '
-                f'{output = }, {expect = }\n'
-                'Testing for strict equality instead.'
-            )
+            logging.info(f"Cannot test item {index} for near equality.\n {output = }, {expect = }\nTesting for strict equality instead.")
             if expect != output:
                 result = (pytest.ExitCode.TESTS_FAILED, case.expected, outputs)
 
@@ -315,7 +267,7 @@ def raises(case, outputs, *args, **kwargs) -> Enum:
     """Test if case raised an exception as prescribed."""
     result = None
     if case.raises:
-        logging.debug(f'Execution is expected to raise {args}')
+        logging.debug(f"Execution is expected to raise {args}")
         if not any(isinstance(outputs, exception) for exception in args):
             result = (pytest.ExitCode.TESTS_FAILED, args, outputs)
     return result or pytest.ExitCode.OK
@@ -333,7 +285,7 @@ def file_contents(case: TestCase, *args, **kwargs) -> Enum:
     result = None
 
     for filename, contents in case.expected[1].items():
-        with open(filename, 'rb') as file:
+        with open(filename, "rb") as file:
             actual_contents = file.read()
             if actual_contents != contents:
                 result = (
@@ -384,10 +336,7 @@ def equal_types(case, outputs, *args, **kwargs) -> Enum:
     """
     result = None
 
-    if not all(
-        isinstance(outputs[1][key], type(case.expected[1][key]))
-        for key in args
-    ):
+    if not all(isinstance(outputs[1][key], type(case.expected[1][key])) for key in args):
         actual_types = {key: type(outputs[1][key]) for key in args}
         expected_types = {key: type(case.expected[1][key]) for key in args}
         result = (pytest.ExitCode.TESTS_FAILED, expected_types, actual_types)
@@ -422,14 +371,10 @@ def time_bounds(case, outputs, *args, **kwargs) -> Enum:
     result = None
     execution_time = outputs[2]
 
-    if (
-        not (case.timing[0] or 0)
-        < execution_time
-        < (case.timing[1] or 2 * execution_time)
-    ):
+    if not (case.timing[0] or 0) < execution_time < (case.timing[1] or 2 * execution_time):
         result = (
             pytest.ExitCode.TESTS_FAILED,
-            f'in {case.timing}',
+            f"in {case.timing}",
             execution_time,
         )
 

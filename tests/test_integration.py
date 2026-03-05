@@ -1,5 +1,6 @@
 """Integration tests for pytest_nbgrader plugin machinery."""
 
+import pathlib
 import types
 
 import yaml
@@ -101,7 +102,7 @@ class TestYamlRoundTrip:
         yaml_file = tmp_path / "test_subtask.yml"
         dump_subtask(subtask, to=yaml_file)
 
-        with open(yaml_file, "rb") as f:
+        with pathlib.Path(yaml_file).open("rb") as f:
             loaded = yaml.unsafe_load(f)
 
         assert isinstance(loaded, TestSubtask)
