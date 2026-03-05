@@ -32,11 +32,13 @@ classifiers = [
 ]
 dynamic = ["description", "version"]
 dependencies = [
-  "pytest >=8"
+  "numpy",
+  "pytest >=8",
+  "pyyaml"
 ]
 
 [project.entry-points."pytest11"]
-pytest-nbgrader = "pytest_nbgrader.pytest_nbgrader"
+pytest-nbgrader = "pytest_nbgrader.conftest"
 
 [project.optional-dependencies]
 dev = [
