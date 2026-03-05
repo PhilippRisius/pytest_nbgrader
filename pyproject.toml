@@ -317,6 +317,12 @@ max-complexity = 15
 [tool.ruff.lint.per-file-ignores]
 "docs/**" = ["E402"]
 "src/pytest_nbgrader/**/__init__.py" = ["F401", "F403"]
+"src/pytest_nbgrader/assertions.py" = ["G004", "S101", "B905", "PERF203"]  # f-string logging (ruff auto-fix bug); assert in test helper; zip strict; try-except in loop
+"src/pytest_nbgrader/cases.py" = ["G004", "S102"]  # f-string logging; exec() inherent to grading student code
+"src/pytest_nbgrader/harness.py" = ["BLE001", "N805"]  # broad except catches student errors; cls is pytest convention
+"src/pytest_nbgrader/prerequisites.py" = ["G003", "G004", "B007"]  # logging style; unused loop var is structural
+"src/pytest_nbgrader/runner.py" = ["S101"]  # assert used for input validation
+"src/pytest_nbgrader/conftest.py" = ["S101", "B028"]  # assert for validation; stacklevel in warnings.warn
 "tests/**" = ["D100", "D101", "D102", "D103", "S101"]
 
 [tool.ruff.lint.pycodestyle]

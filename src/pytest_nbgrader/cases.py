@@ -25,16 +25,19 @@ logger = logging.getLogger(__name__)
 
 
 class Timer:
-    def __enter__(self):
+    """Context manager for measuring execution time."""
+
+    def __enter__(self):  # noqa: D105
         self.start = perf_counter()
         self.end = None
         return self
 
-    def __exit__(self, *exc_args):
+    def __exit__(self, *exc_args):  # noqa: D105
         self.end = perf_counter()
 
     @property
     def elapsed(self):
+        """Return elapsed time in seconds."""
         return (self.end or perf_counter()) - self.start
 
 

@@ -1,3 +1,5 @@
+"""Serialize test cases to YAML files."""
+
 import pathlib
 
 import yaml
@@ -6,12 +8,14 @@ from pytest_nbgrader.cases import TestSubtask
 
 
 def dump_exercise(exercise: dict[str, dict[str, TestSubtask]], to=pathlib.Path("tests")):
+    """Dump all subtasks of an exercise to a directory tree."""
     to.mkdir(parents=True, exist_ok=True)
     for task, subtasks in exercise.items():
         dump_task(subtasks, to=to / task)
 
 
 def dump_task(subtasks: dict[str, TestSubtask], to: pathlib.Path):
+    """Dump all subtasks of a single task to a directory."""
     to.mkdir(parents=True, exist_ok=True)
     for subtask_name, subtask in subtasks.items():
         dump_subtask(subtask, to=to / f"{subtask_name}.yml")
@@ -22,6 +26,7 @@ def dump_subtask(
     to: pathlib.Path = pathlib.Path("tests.yml"),
     append=False,
 ):
+    """Dump a single subtask to a YAML file."""
     to.parent.mkdir(parents=True, exist_ok=True)
     mode = "wb" + append * "+"
     with pathlib.Path(to).open(mode) as f:

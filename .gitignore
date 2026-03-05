@@ -1,4 +1,6 @@
 # PYTEST_NBGRADER-specific
+existing_code/
+TODO
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

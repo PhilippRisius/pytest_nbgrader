@@ -1,4 +1,5 @@
-"""Module for testing actual and expected outputs of a TestCase.
+"""
+Module for testing actual and expected outputs of a TestCase.
 
 Export functions for asserting relations between student outputs and expected outputs:
 - close_attributes --
@@ -18,11 +19,13 @@ __version__ = "0.3"
 import functools
 import inspect
 import logging
+import pathlib
 import types
 from enum import Enum
 
 import numpy as np
 import pytest
+
 from pytest_nbgrader.cases import TestCase
 
 
@@ -51,8 +54,7 @@ def _log(
 
 @_log
 def close_attributes(case: TestCase, outputs, *args, **kwargs):
-    """assert close values for given attributes between expected and outputs."""
-
+    """Assert close values for given attributes between expected and outputs."""
     try:
         expected_attrs, output_attrs = ([getattr(instance, attribute) for attribute in args] for instance in (case.expected, outputs))
         np.testing.assert_allclose(expected_attrs, output_attrs, **kwargs)
@@ -70,7 +72,7 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
     import pathlib
 
     def invalid_import(name, expected=None, actual=None):
-        """format message for warning about invalid imports"""
+        """Format message for warning about invalid imports"""
         message = f"{name} was not imported"
         if expected or actual:
             expected = expected or "locally defined"
@@ -136,7 +138,6 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
 
 def equal_attributes(case: TestCase, *args, **kwargs) -> Enum:
     """Test if all attributes of expected and actual return object are equal."""
-
     result = None
 
     if all(getattr(case.return_object, attr) == getattr(case.expected_object, attr) for attr in args):
@@ -147,7 +148,6 @@ def equal_attributes(case: TestCase, *args, **kwargs) -> Enum:
 
 def has_method(case: TestCase, *args, **kwargs) -> Enum:
     """Test if return object of TestCase has a given method"""
-
     result = None
 
     if all(hasattr(case.return_object, attribute) for attribute in args):
@@ -164,7 +164,6 @@ def has_method(case: TestCase, *args, **kwargs) -> Enum:
 
 def calls(case: TestCase, caller, **callees):
     """Test if function 'caller' of imported module calls callees in the prescribed manner."""
-
     from contextlib import ExitStack
     from unittest.mock import call, patch
 
@@ -191,7 +190,8 @@ def calls(case: TestCase, caller, **callees):
 
 @_log
 def equal_contents(case, outputs, *args, **kwargs) -> Enum:
-    """Test if containers have the same elements, piecewise between actual and expected TestCase outputs.
+    """
+    Test if containers have the same elements, piecewise between actual and expected TestCase outputs.
 
     case -- TestCase with expected outputs.
     outputs -- actual outputs from a student submission.
@@ -228,7 +228,8 @@ def equal_contents(case, outputs, *args, **kwargs) -> Enum:
 
 @_log
 def almost_equal(case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, **kwargs) -> Enum:
-    """Test for closeness, up to tolerance epsilon, between actual and expected TestCase outputs.
+    """
+    Test for closeness, up to tolerance epsilon, between actual and expected TestCase outputs.
 
     epsilon -- relative tolerance for equality testing.
     case -- TestCase with expected outputs.
@@ -275,9 +276,11 @@ def raises(case, outputs, *args, **kwargs) -> Enum:
 
 @_log
 def file_contents(case: TestCase, *args, **kwargs) -> Enum:
-    """Test if files in Testcase.expected[1] have the prescribed contents.
+    """
+    Test if files in Testcase.expected[1] have the prescribed contents.
 
-    Parameters:
+    Parameters
+    ----------
       case -- TestCaseFunction with filenames: expected contents
 
     Return pytest.ExitCode.OK if contents of files are bitwise identical, else pytest.ExitCode.TESTS_FAILED.
@@ -285,7 +288,7 @@ def file_contents(case: TestCase, *args, **kwargs) -> Enum:
     result = None
 
     for filename, contents in case.expected[1].items():
-        with open(filename, "rb") as file:
+        with pathlib.Path(filename).open("rb") as file:
             actual_contents = file.read()
             if actual_contents != contents:
                 result = (
@@ -299,7 +302,8 @@ def file_contents(case: TestCase, *args, **kwargs) -> Enum:
 
 @_log
 def equal_value(case, outputs, *args, **kwargs) -> Enum:
-    """Test for exact equality between variables *args of expected outputs of a TestCase and actual outputs.
+    """
+    Test for exact equality between variables *args of expected outputs of a TestCase and actual outputs.
 
     case -- TestCase with expected outputs.
     outputs -- actual outputs from a student submission
@@ -325,7 +329,8 @@ def equal_value(case, outputs, *args, **kwargs) -> Enum:
 
 @_log
 def equal_types(case, outputs, *args, **kwargs) -> Enum:
-    """Test for equal types between variables *args of expected outputs of a TestCase and actual outputs.
+    """
+    Test for equal types between variables *args of expected outputs of a TestCase and actual outputs.
 
     case -- TestCase with expected outputs.
     outputs -- actual outputs from a student submission.
@@ -346,7 +351,8 @@ def equal_types(case, outputs, *args, **kwargs) -> Enum:
 
 @_log
 def equal_scope(case, outputs, *args, **kwargs) -> Enum:
-    """Test for equal scope expected outputs of a TestCase and actual outputs.
+    """
+    Test for equal scope expected outputs of a TestCase and actual outputs.
 
     case -- TestCase with expected outputs.
     outputs -- actual outputs from a student submission.
@@ -367,7 +373,6 @@ def equal_scope(case, outputs, *args, **kwargs) -> Enum:
 @_log
 def time_bounds(case, outputs, *args, **kwargs) -> Enum:
     """Test for execution time within bounds, if provided"""
-
     result = None
     execution_time = outputs[2]
 
