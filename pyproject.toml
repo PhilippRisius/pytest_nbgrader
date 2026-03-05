@@ -26,12 +26,17 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: Implementation :: CPython",
   "Typing :: Typed"
 ]
 dynamic = ["description", "version"]
 dependencies = [
+  "pytest >=8"
 ]
+
+[project.entry-points."pytest11"]
+pytest-nbgrader = "pytest_nbgrader.pytest_nbgrader"
 
 [project.optional-dependencies]
 dev = [
@@ -39,8 +44,6 @@ dev = [
   "bump-my-version >=1.2.3",
   "coverage >=7.5.0",
   "deptry >=0.23.1",
-  "flake8 >=7.3.0",
-  "flake8-rst-docstrings >=0.3.1",
   "flit >=3.12.0,<4.0",
   "mypy >=1.18.2",
   "numpydoc >=1.9.0",
@@ -80,6 +83,7 @@ all = ["pytest_nbgrader[dev]", "pytest_nbgrader[docs]"]
 current_version = "0.1.0"
 commit = true
 commit_args = "--no-verify"
+message = "Bump version: {current_version} → {new_version} [skip ci]"
 tag = false
 tag_name = "v{new_version}"
 allow_dirty = true
@@ -113,7 +117,7 @@ replace = """\
 
 .. _changes_{new_version}:
 
-`v{new_version} <https://github.com/PhilippRisius/pytest_nbgrader/tree/{new_version}>`_ ({now:%Y-%m-%d})
+`v{new_version} <https://github.com/PhilippRisius/pytest_nbgrader/tree/v{new_version}>`_ ({now:%Y-%m-%d})
 ----------------------------------------------------------------------------------------
 """
 
@@ -126,6 +130,11 @@ replace = "__version__ = \"{new_version}\""
 filename = "tests/test_pytest_nbgrader.py"
 search = "__version__ = \"{current_version}\""
 replace = "__version__ = \"{new_version}\""
+
+[[tool.bumpversion.files]]
+filename = "CITATION.cff"
+search = "version: \"{current_version}\""
+replace = "version: \"{new_version}\""
 
 [tool.bumpversion.parts.build]
 independent = false

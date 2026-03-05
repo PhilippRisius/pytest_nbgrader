@@ -87,7 +87,7 @@ Ready to contribute? Here's how to set up ``pytest nbgrader plugin`` for local d
 
     This installs ``pytest_nbgrader`` in an "editable" state, meaning that changes to the code are immediately seen by the environment. To ensure a consistent coding style, `make dev` also installs the ``pre-commit`` hooks to your local clone.
 
-    On commit, ``pre-commit`` will check that ``flake8``, and ``ruff`` checks are passing, perform automatic fixes if possible, and warn of violations that require intervention. If your commit fails the checks initially, simply fix the errors, re-add the files, and re-commit.
+    On commit, ``pre-commit`` will check that ``ruff`` checks are passing, perform automatic fixes if possible, and warn of violations that require intervention. If your commit fails the checks initially, simply fix the errors, re-add the files, and re-commit.
 
     You can also run the hooks manually with:
 
@@ -202,10 +202,9 @@ To run specific code style checks:
 .. code-block:: console
 
     python -m ruff check src/pytest_nbgrader tests
-    python -m flake8 src/pytest_nbgrader tests
     validate-docstrings src/pytest_nbgrader/**.py
 
-To get ``ruff``, ``flake8`` (with the ``flake8-rst-docstrings`` plugin), and ``numpydoc`` (for ``validate-docstrings``), simply install them with ``pip`` into your environment.
+To get ``ruff`` and ``numpydoc`` (for ``validate-docstrings``), simply install them with ``pip`` into your environment.
 
 Translations
 ------------
