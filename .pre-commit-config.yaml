@@ -2,11 +2,7 @@ default_language_version:
   python: python3
 
 repos:
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
-    hooks:
-      - id: pyupgrade
-        args: [ '--py310-plus' ]
+  # pyupgrade removed: crashes on Python 3.14 and ruff UP rules cover the same checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -59,6 +55,7 @@ repos:
     rev: v1.18.2
     hooks:
       - id: mypy
+        additional_dependencies: [ 'types-PyYAML' ]
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
     hooks:
