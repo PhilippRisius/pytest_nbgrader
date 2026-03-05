@@ -41,8 +41,6 @@ dev = [
   "bump-my-version >=1.2.3",
   "coverage >=7.5.0",
   "deptry >=0.23.1",
-  "flake8 >=7.3.0",
-  "flake8-rst-docstrings >=0.3.1",
   "flit >=3.12.0,<4.0",
   "mypy >=1.18.2",
   "numpydoc >=1.9.0",
@@ -85,6 +83,7 @@ pytest-nbgrader = "pytest_nbgrader.pytest_nbgrader"
 current_version = "0.1.0"
 commit = true
 commit_args = "--no-verify"
+message = "Bump version: {current_version} → {new_version} [skip ci]"
 tag = false
 tag_name = "v{new_version}"
 allow_dirty = true
@@ -118,7 +117,7 @@ replace = """\
 
 .. _changes_{new_version}:
 
-`v{new_version} <https://github.com/PhilippRisius/pytest_nbgrader/tree/{new_version}>`_ ({now:%Y-%m-%d})
+`v{new_version} <https://github.com/PhilippRisius/pytest_nbgrader/tree/v{new_version}>`_ ({now:%Y-%m-%d})
 ----------------------------------------------------------------------------------------
 """
 

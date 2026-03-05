@@ -8,9 +8,6 @@ on:
       - .cruft.json
       - CHANGELOG.rst
       - README.rst
-      - pyproject.toml
-      - tests/test_pytest_nbgrader.py
-      - src/pytest_nbgrader/__init__.py
   pull_request:
 
 concurrency:

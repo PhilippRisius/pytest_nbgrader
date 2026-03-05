@@ -1,4 +1,4 @@
-.PHONY: clean clean-build clean-pyc clean-test coverage dist docs help install lint lint/flake8
+.PHONY: clean clean-build clean-pyc clean-test coverage dist docs help install lint
 .DEFAULT_GOAL := help
 
 define BROWSER_PYSCRIPT
@@ -54,12 +54,9 @@ clean-test: ## remove test and coverage artifacts
 	rm -fr htmlcov/
 	rm -fr .pytest_cache
 
-lint/flake8: ## check style with flake8
+lint: ## check style
 	python -m ruff check src/pytest_nbgrader tests
-	python -m flake8 --config=.flake8 src/pytest_nbgrader tests
 	python -m numpydoc lint src/pytest_nbgrader/**.py
-
-lint: lint/flake8 ## check style
 
 test: ## run tests quickly with the default Python
 	python -m pytest

@@ -11,6 +11,7 @@ on:
       - main
     paths-ignore:
       - .cruft.json
+      - CITATION.cff
       - .editorconfig
       - .github/**.yml
       - .gitignore
