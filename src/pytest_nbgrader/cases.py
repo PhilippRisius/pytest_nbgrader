@@ -40,13 +40,13 @@ class Timer:
         self.end = None
         return self
 
-    def __exit__(self, *exc_args):
+    def __exit__(self, *_exc_args):
         """
         Exit the timer context and record end time.
 
         Parameters
         ----------
-        *exc_args : tuple
+        *_exc_args : tuple
             Exception info passed by the context manager protocol.
         """
         self.end = perf_counter()

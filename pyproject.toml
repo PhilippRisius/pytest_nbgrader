@@ -216,9 +216,16 @@ module = [
   # Don't require test functions to include types
   "tests.*"
 ]
-allow_untyped_defs = true
-disable_error_code = "attr-defined"
+disallow_untyped_defs = false
+disable_error_code = ["attr-defined", "assignment"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  # Source modules need type annotations (TODO)
+  "pytest_nbgrader.*"
+]
+ignore_errors = true
 
 [tool.numpydoc_validation]
 checks = [
