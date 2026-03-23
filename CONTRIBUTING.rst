@@ -33,7 +33,7 @@ Look through the GitHub issues for features. Anything tagged with "enhancement" 
 Write Documentation
 ~~~~~~~~~~~~~~~~~~~
 
-pytest nbgrader plugin could always use more documentation, whether as part of the official pytest nbgrader plugin docs, in docstrings, or even on the web in blog posts, articles, and such.
+pytest-nbgrader could always use more documentation, whether as part of the official pytest-nbgrader docs, in docstrings, or even on the web in blog posts, articles, and such.
 
 Submit Feedback
 ~~~~~~~~~~~~~~~
@@ -53,21 +53,21 @@ Get Started!
 
     If you are new to using `GitHub <https://github.com/>`_ and ``git``, please read `this guide <https://guides.github.com/activities/hello-world/>`_ first.
 
-Ready to contribute? Here's how to set up ``pytest nbgrader plugin`` for local development.
+Ready to contribute? Here's how to set up ``pytest-nbgrader`` for local development.
 
-#. First, clone the ``pytest nbgrader plugin`` repo locally.
+#. First, clone the ``pytest-nbgrader`` repo locally.
 
-    * If you are not a ``pytest nbgrader plugin`` collaborator, first fork the ``pytest nbgrader plugin`` repo on GitHub, then clone your fork locally.
-
-        .. code-block:: console
-
-            git clone git@github.com:your_name_here/pytest-nbgrader-plugin.git
-
-    * If you are a ``pytest nbgrader plugin`` collaborator, clone the ``pytest nbgrader plugin`` repo directly.
+    * If you are not a ``pytest-nbgrader`` collaborator, first fork the ``pytest-nbgrader`` repo on GitHub, then clone your fork locally.
 
         .. code-block:: console
 
-            git clone git@github.com:PhilippRisius/pytest-nbgrader-plugin.git
+            git clone git@github.com:your_name_here/pytest_nbgrader.git
+
+    * If you are a ``pytest-nbgrader`` collaborator, clone the ``pytest-nbgrader`` repo directly.
+
+        .. code-block:: console
+
+            git clone git@github.com:PhilippRisius/pytest_nbgrader.git
 
 #. Install your local copy into a development environment. Using ``virtualenv`` (``virtualenvwrapper``), you can create a new development environment with:
 
@@ -149,7 +149,7 @@ Ready to contribute? Here's how to set up ``pytest nbgrader plugin`` for local d
     If you have merge conflicts, you might need to replace `git pull` with `git merge` and resolve the conflicts manually.
     Resolving conflicts from the command line can be tricky. If you are not comfortable with this, you can ignore the last command and instead use a GUI like PyCharm or Visual Studio Code to merge the remote changes and resolve the conflicts.
 
-#. Before merging, your Pull Request will need to be based on the `main` branch of the ``pytest nbgrader plugin`` repository. If your branch is not up-to-date with the `main` branch, you can perform similar steps as above to update your branch:
+#. Before merging, your Pull Request will need to be based on the `main` branch of the ``pytest-nbgrader`` repository. If your branch is not up-to-date with the `main` branch, you can perform similar steps as above to update your branch:
 
     .. code-block:: console
 

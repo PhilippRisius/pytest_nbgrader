@@ -106,7 +106,7 @@ With `docker` installed and running, begin by pulling the image:
 
         sudo docker pull quay.io/pypa/manylinux_2_24_x86_64
 
-From the pytest nbgrader plugin source folder we can enter into the docker container, providing access to the `src/pytest_nbgrader` source files by linking them to the running image:
+From the pytest-nbgrader source folder we can enter into the docker container, providing access to the `src/pytest_nbgrader` source files by linking them to the running image:
 
     .. code-block:: console
 
@@ -118,7 +118,7 @@ Finally, to build the wheel, we run it against the provided Python3.9 binary:
 
         /opt/python/cp39-cp39m/bin/python -m build --sdist --wheel
 
-This will then place two files in `pytest nbgrader plugin/dist/` ("pytest_nbgrader-1.2.3-py3-none-any.whl" and "pytest nbgrader plugin-1.2.3.tar.gz").
+This will then place two files in `dist/` ("pytest_nbgrader-1.2.3-py3-none-any.whl" and "pytest_nbgrader-1.2.3.tar.gz").
 We can now leave our docker container (`exit`) and continue with uploading the files to PyPI:
 
     .. code-block:: console

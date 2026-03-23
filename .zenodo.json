@@ -1,5 +1,5 @@
 {
-  "title": "pytest nbgrader plugin",
+  "title": "pytest-nbgrader",
   "creators": [
     {
       "name": "Risius, Philipp Emmo Tobias",
@@ -7,7 +7,7 @@
     }
   ],
   "keywords": [
-    "pytest_nbgrader"
+    "pytest-nbgrader"
   ],
   "license": "MIT",
   "language": "eng",

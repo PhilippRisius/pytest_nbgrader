@@ -1,5 +1,5 @@
-Welcome to pytest nbgrader plugin's documentation!
-==================================================
+Welcome to pytest-nbgrader's documentation!
+============================================
 
 .. toctree::
    :maxdepth: 2
