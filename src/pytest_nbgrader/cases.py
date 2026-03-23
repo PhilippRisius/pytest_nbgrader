@@ -1,7 +1,7 @@
 """
 Classes for test cases using code objects or functions.
 
-Export classes for TestCases, listing *args and **kwargs for inputs and
+Export classes for TestCases, listing ``*args`` and ``**kwargs`` for inputs and
 (both actual and expected) outputs from a student submission:
 - TestCase: Data class for storing inputs and expected outputs of tests.
 - Test: Class for executing submissions on TestCases.

@@ -14,15 +14,9 @@ import types
 
 
 class Submission:
-    """
-    Store submission object from notebooks.
+    """Store submission object from notebooks."""
 
-    Attributes
-    ----------
-    submission : object or None
-        The stored submission object.
-    """
-
+    #: The stored submission object.
     submission = None
 
     @functools.singledispatchmethod
