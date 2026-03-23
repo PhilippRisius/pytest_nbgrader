@@ -1,5 +1,5 @@
 name: Generic issue template
-description: For detailing generic/uncategorized issues in pytest nbgrader plugin
+description: For detailing generic/uncategorized issues in pytest-nbgrader
 
 body:
   - type: textarea

@@ -3,7 +3,7 @@ Installation
 ============
 
 ..
-    We strongly recommend installing pytest nbgrader plugin in an Anaconda Python environment.
+    We strongly recommend installing pytest-nbgrader in an Anaconda Python environment.
     Furthermore, due to the complexity of some packages, the default dependency solver can take a long time to resolve the environment.
     If `mamba` is not already your default solver, consider running the following commands in order to speed up the process:
 
@@ -20,7 +20,7 @@ If you don't have `pip`_ installed, this `Python installation guide`_ can guide 
 Stable release
 --------------
 
-To install pytest nbgrader plugin, run this command in your terminal:
+To install pytest-nbgrader, run this command in your terminal:
 
 .. code-block:: console
 
@@ -31,13 +31,13 @@ To install pytest nbgrader plugin, run this command in your terminal:
 
         conda install pytest_nbgrader
 
-This is the preferred method to install pytest nbgrader plugin, as it will always install the most recent stable release.
+This is the preferred method to install pytest-nbgrader, as it will always install the most recent stable release.
 
 
 From sources
 ------------
 
-The sources for pytest nbgrader plugin can be downloaded from the `Github repo`_.
+The sources for pytest-nbgrader can be downloaded from the `Github repo`_.
 
 #. Download the source code from the `Github repo`_ using one of the following methods:
 
@@ -72,8 +72,8 @@ The sources for pytest nbgrader plugin can be downloaded from the `Github repo`_
 
             python -m pip install -e .[dev]
 
-        Even if you do not intend to contribute to `pytest nbgrader plugin`, we favor using `environment-dev.yml` over `environment.yml` because it includes additional packages that are used to run all the examples provided in the documentation.
-        If for some reason you wish to install the `PyPI` version of `pytest nbgrader plugin` into an existing Anaconda environment (*not recommended if requirements are not met*), only run the last command above.
+        Even if you do not intend to contribute to `pytest-nbgrader`, we favor using `environment-dev.yml` over `environment.yml` because it includes additional packages that are used to run all the examples provided in the documentation.
+        If for some reason you wish to install the `PyPI` version of `pytest-nbgrader` into an existing Anaconda environment (*not recommended if requirements are not met*), only run the last command above.
 
 #. When new changes are made to the `Github repo`_, if using a clone, you can update your local copy using the following commands from the root of the repository:
 

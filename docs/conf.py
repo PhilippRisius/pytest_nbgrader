@@ -72,7 +72,7 @@ source_suffix = {'.rst': 'restructuredtext'}
 master_doc = 'index'
 
 # General information about the project.
-project = 'pytest nbgrader plugin'
+project = 'pytest-nbgrader'
 copyright = "2025, Philipp Emmo Tobias Risius"
 author = "Philipp Emmo Tobias Risius"
 
@@ -160,7 +160,7 @@ latex_elements: dict[str, Any] = {
 # [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'pytest_nbgrader.tex',
-     'pytest nbgrader plugin Documentation',
+     'pytest-nbgrader Documentation',
      'Philipp Emmo Tobias Risius', 'manual'),
 ]
 
@@ -171,7 +171,7 @@ latex_documents = [
 # (source start file, name, description, authors, manual section).
 man_pages = [
     (master_doc, 'pytest_nbgrader',
-     'pytest nbgrader plugin Documentation',
+     'pytest-nbgrader Documentation',
      [author], 1)
 ]
 
@@ -183,9 +183,9 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
     (master_doc, 'pytest_nbgrader',
-     'pytest nbgrader plugin Documentation',
+     'pytest-nbgrader Documentation',
      author,
      'pytest_nbgrader',
-     'One line description of project.',
+     'Pytest plugin for nbgrader notebook grading.',
      'Miscellaneous'),
 ]

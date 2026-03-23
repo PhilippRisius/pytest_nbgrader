@@ -1,4 +1,4 @@
-* pytest nbgrader plugin version:
+* pytest-nbgrader version:
 * Python version:
 * Operating System:
 

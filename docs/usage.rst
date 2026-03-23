@@ -2,7 +2,7 @@
 Usage
 =====
 
-To use pytest nbgrader plugin in a project:
+To use pytest-nbgrader in a project:
 
 .. code-block:: python
 

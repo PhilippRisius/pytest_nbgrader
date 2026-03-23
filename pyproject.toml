@@ -12,11 +12,11 @@ maintainers = [
 ]
 readme = {file = "README.rst", content-type = "text/x-rst"}
 requires-python = ">=3.10.0"
-keywords = ["pytest nbgrader plugin"]
+keywords = ["pytest-nbgrader", "nbgrader", "pytest-plugin"]
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
   "Natural Language :: English",
   "Operating System :: OS Independent",
@@ -73,9 +73,8 @@ docs = [
 all = ["pytest_nbgrader[dev]", "pytest_nbgrader[docs]"]
 
 [project.urls]
-# "Homepage" = "https://pytest nbgrader plugin.readthedocs.io/"
-# "Changelog" = "https://pytest nbgrader plugin.readthedocs.io/en/stable/changelog.html"
-# "About Ouranos" = "https://ouranos.ca/en/"
+"Homepage" = "https://pytest-nbgrader.readthedocs.io/"
+"Changelog" = "https://pytest-nbgrader.readthedocs.io/en/stable/changelog.html"
 "Issue tracker" = "https://github.com/PhilippRisius/pytest_nbgrader/issues"
 "Source" = "https://github.com/PhilippRisius/pytest_nbgrader"
 
