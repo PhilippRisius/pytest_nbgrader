@@ -26,6 +26,6 @@
 
 __author__ = """Philipp Emmo Tobias Risius"""
 __email__ = "philipp.e.risius@theo.physik.uni-giessen.de"
-__version__ = "0.1.0"
+__version__ = "0.2.0-dev.1"
 
 from . import harness, loader
