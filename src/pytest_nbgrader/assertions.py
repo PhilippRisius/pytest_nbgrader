@@ -29,6 +29,9 @@ import pytest
 from pytest_nbgrader.cases import TestCase
 
 
+_SENTINEL = object()
+
+
 def _log(
     assertion,
     name: str = "",
@@ -218,14 +221,19 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
     return result or pytest.ExitCode.OK
 
 
-def equal_attributes(case: TestCase, *args, **kwargs) -> Enum:
+@_log
+def equal_attributes(case: TestCase, outputs, *args, **kwargs) -> Enum:
     """
     Test if all attributes of expected and actual return object are equal.
 
     Parameters
     ----------
     case : TestCase
-        Test case with ``return_object`` and ``expected_object``.
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs ``(positional, named, elapsed)`` from student submission.
+        The return object is taken from ``outputs[0][0]``; the expected object
+        from ``case.expected[0][0]``.
     *args : str
         Attribute names to compare.
     **kwargs : dict
@@ -236,22 +244,30 @@ def equal_attributes(case: TestCase, *args, **kwargs) -> Enum:
     Enum
         ``pytest.ExitCode.OK`` if equal, otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    result = None
+    if not outputs[0]:
+        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
 
-    if all(getattr(case.return_object, attr) == getattr(case.expected_object, attr) for attr in args):
-        result = pytest.ExitCode.TESTS_FAILED
+    return_obj = outputs[0][0]
+    expected_obj = case.expected[0][0]
 
-    return result or pytest.ExitCode.OK
+    if not all(getattr(return_obj, attr, _SENTINEL) == getattr(expected_obj, attr, _SENTINEL) for attr in args):
+        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+
+    return pytest.ExitCode.OK
 
 
-def has_method(case: TestCase, *args, **kwargs) -> Enum:
+@_log
+def has_method(case: TestCase, outputs, *args, **kwargs) -> Enum:
     """
-    Test if return object of TestCase has a given method.
+    Test if return object has given methods/attributes.
 
     Parameters
     ----------
     case : TestCase
-        Test case whose ``return_object`` is inspected.
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs ``(positional, named, elapsed)`` from student submission.
+        The return object is taken from ``outputs[0][0]``.
     *args : str
         Attribute names that must exist on the return object.
     **kwargs : dict
@@ -263,28 +279,35 @@ def has_method(case: TestCase, *args, **kwargs) -> Enum:
         ``pytest.ExitCode.OK`` if all methods exist with correct types,
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    result = None
+    if not outputs[0]:
+        return pytest.ExitCode.TESTS_FAILED, args, "no return object"
 
-    if all(hasattr(case.return_object, attribute) for attribute in args):
-        if not all(
-            hasattr(case.return_object, attribute) and isinstance(getattr(case.return_object, attribute), type_hint)
-            for attribute, type_hint in kwargs.items()
-        ):
-            result = pytest.ExitCode.TESTS_FAILED
-    else:
-        result = pytest.ExitCode.TESTS_FAILED
+    return_obj = outputs[0][0]
+    missing = [attr for attr in args if not hasattr(return_obj, attr)]
+    if missing:
+        return pytest.ExitCode.TESTS_FAILED, args, missing
 
-    return result or pytest.ExitCode.OK
+    wrong_types = {
+        attr: type(getattr(return_obj, attr)) for attr, type_hint in kwargs.items() if not isinstance(getattr(return_obj, attr, None), type_hint)
+    }
+    if wrong_types:
+        return pytest.ExitCode.TESTS_FAILED, kwargs, wrong_types
+
+    return pytest.ExitCode.OK
 
 
-def calls(case: TestCase, caller, **callees):
+@_log
+def calls(case: TestCase, outputs, caller, **callees):
     """
     Test if function 'caller' of imported module calls callees in the prescribed manner.
 
     Parameters
     ----------
     case : TestCase
-        Test case whose ``outputs[0][0]`` is the module or class under test.
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs ``(positional, named, elapsed)`` from student submission.
+        The module or class under test is taken from ``outputs[0][0]``.
     caller : str
         Name of the function to call on the object.
     **callees : list of tuple
@@ -298,17 +321,21 @@ def calls(case: TestCase, caller, **callees):
     from contextlib import ExitStack
     from unittest.mock import call, patch
 
+    if not outputs[0]:
+        return pytest.ExitCode.TESTS_FAILED, "expected object", "no return object"
+
+    obj = outputs[0][0]
+    if not isinstance(obj, (type, types.ModuleType)):
+        return pytest.ExitCode.TESTS_FAILED, "type or module", type(obj).__name__
+
     result = None
 
-    obj = case.outputs[0][0]
-    assert isinstance(obj, type) or isinstance(obj, types.ModuleType)
-
     with ExitStack() as stack:
-        calls = {callee: stack.enter_context(patch.object(obj, callee, wraps=getattr(obj, callee))) for callee in callees}
+        mocks = {callee: stack.enter_context(patch.object(obj, callee, wraps=getattr(obj, callee))) for callee in callees}
         getattr(obj, caller)()
 
-    for callee, mock in calls.items():
-        expected_calls = [call(*args, **kwargs) for args, kwargs in callees.get(callee)]
+    for callee, mock in mocks.items():
+        expected_calls = [call(*a, **kw) for a, kw in callees.get(callee)]
         if expected_calls != mock.mock_calls:
             result = (
                 pytest.ExitCode.TESTS_FAILED,

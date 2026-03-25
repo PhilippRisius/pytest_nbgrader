@@ -226,6 +226,12 @@ module = [
 ]
 ignore_errors = true
 
+[[tool.mypy.overrides]]
+module = [
+  "tests.*"
+]
+ignore_errors = true
+
 [tool.numpydoc_validation]
 checks = [
   "all", # report on all checks, except the below
