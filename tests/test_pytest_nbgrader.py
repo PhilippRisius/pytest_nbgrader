@@ -22,6 +22,16 @@ def test_package_metadata():
         assert '__version__ = "0.2.0"' in contents
 
 
+def test_package_reexports():
+    """Test that __init__.py re-exports harness and loader."""
+    import pytest_nbgrader
+
+    assert hasattr(pytest_nbgrader, "harness")
+    assert hasattr(pytest_nbgrader, "loader")
+    assert hasattr(pytest_nbgrader.loader, "Submission")
+    assert hasattr(pytest_nbgrader.harness, "TestClass")
+
+
 def test_import_loader():
     """Test that the loader module is importable."""
     from pytest_nbgrader import loader
