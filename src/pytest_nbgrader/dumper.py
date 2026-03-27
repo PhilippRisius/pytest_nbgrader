@@ -57,6 +57,6 @@ def dump_subtask(
         Whether to append to an existing file, by default False.
     """
     to.parent.mkdir(parents=True, exist_ok=True)
-    mode = "wb" + append * "+"
+    mode = "ab" if append else "wb"
     with pathlib.Path(to).open(mode) as f:
         yaml.dump(subtask, f, encoding="utf-8")

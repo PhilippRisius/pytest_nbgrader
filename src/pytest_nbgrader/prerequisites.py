@@ -192,6 +192,8 @@ def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
         spec.loader.exec_module(module)
 
     for output, expected, actual in outputs.values():
+        if expected is None:
+            continue
         actual = actual.getvalue()
         if actual != expected:
             logging.warning(message(spec.name, output, actual, expected))
