@@ -1,6 +1,7 @@
 """Tests for cases.py — Timer, format_result, execute dispatches."""
 
 import importlib.util
+import logging
 
 import pytest
 
@@ -151,6 +152,39 @@ class TestExecuteFunction:
         case = TestCase(inputs=((original_list,), {}), expected=((None,), {}))
         execute(mutate, case)
         assert original_list == [1, 2, 3]
+
+    def test_exception_propagates(self):
+        """Function that raises propagates the exception through execute."""
+
+        def failing():
+            raise ValueError("boom")
+
+        case = TestCase(inputs=((), {}), expected=((), {}), raises=True)
+        with pytest.raises(ValueError, match="boom"):
+            execute(failing, case)
+
+    def test_output_count_mismatch_warning(self, caplog):
+        """Mismatch between expected and actual output count logs warning."""
+
+        def give_pair():
+            return 1, 2
+
+        # Expected 3 outputs but function returns 2 — triggers mismatch warning
+        case = TestCase(inputs=((), {}), expected=((1, 2, 3), {}))
+        with caplog.at_level(logging.WARNING):
+            execute(give_pair, case)
+        assert "Number of expected outputs" in caplog.text
+
+    def test_output_count_mismatch_suppressed_when_raises(self, caplog):
+        """Mismatch warning suppressed when case.raises is True."""
+
+        def give_pair():
+            return 1, 2
+
+        case = TestCase(inputs=((), {}), expected=((1, 2, 3), {}), raises=True)
+        with caplog.at_level(logging.WARNING):
+            execute(give_pair, case)
+        assert "Number of expected outputs" not in caplog.text
 
 
 class TestExecuteCode:

@@ -34,6 +34,21 @@ class TestDumpSubtask:
 
         assert size_after_second > size_after_first
 
+    def test_append_mode_both_subtasks_in_file(self, tmp_path):
+        """Both subtasks' data present in appended file."""
+        yaml_file = tmp_path / "test.yml"
+
+        subtask1 = _make_subtask(cases=[TestCase(inputs=((111,), {}), expected=((111,), {}))])
+        subtask2 = _make_subtask(cases=[TestCase(inputs=((222,), {}), expected=((222,), {}))])
+
+        dump_subtask(subtask1, to=yaml_file, append=False)
+        dump_subtask(subtask2, to=yaml_file, append=True)
+
+        content = yaml_file.read_text()
+        assert content.count("TestSubtask") == 2
+        assert "111" in content
+        assert "222" in content
+
     def test_creates_parent_dirs(self, tmp_path):
         """dump_subtask creates parent directories if needed."""
         yaml_file = tmp_path / "deep" / "nested" / "test.yml"

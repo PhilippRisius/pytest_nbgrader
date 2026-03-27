@@ -35,15 +35,16 @@ class TestSubmitPrintOutput:
     """Tests that submit() prints informative messages."""
 
     def test_function_prints_source(self, capsys):
-        """submit(function) prints function source code."""
+        """submit(function) prints actual source code of the function."""
 
         def my_func():
             return 42
 
         Submission.submit(my_func)
         captured = capsys.readouterr()
-        assert "will be tested" in captured.out
-        assert "my_func" in captured.out
+        assert "submission will be tested" in captured.out
+        assert "def my_func" in captured.out
+        assert "return 42" in captured.out
 
     def test_string_prints_code(self, capsys):
         """submit(str) prints the code string."""
@@ -53,14 +54,16 @@ class TestSubmitPrintOutput:
         assert "x = 1 + 2" in captured.out
 
     def test_class_prints_notice(self, capsys):
-        """submit(type) prints class notice."""
+        """submit(type) prints class name and source-not-shown notice."""
 
         class MyClass:
             pass
 
         Submission.submit(MyClass)
         captured = capsys.readouterr()
+        assert "MyClass" in captured.out
         assert "will be tested" in captured.out
+        assert "source code not shown" in captured.out
 
     def test_path_prints_file_contents(self, tmp_path, capsys):
         """submit(Path) prints the file contents."""
