@@ -18,6 +18,14 @@ from pytest_nbgrader.loader import Submission
 from pytest_nbgrader.prerequisites import has_signature
 
 
+@pytest.fixture(autouse=True)
+def _isolate_submission():
+    """Save and restore Submission.submission around each test."""
+    saved = Submission.submission
+    yield
+    Submission.submission = saved
+
+
 # ---------------------------------------------------------------------------
 # Function submission: submit → execute → equal_value
 # ---------------------------------------------------------------------------
@@ -85,7 +93,7 @@ class TestFunctionWorkflow:
         assert result is pytest.ExitCode.OK
 
     def test_raises_assertion_for_expected_exception(self):
-        """Raises assertion verifies expected exceptions."""
+        """Raises assertion verifies expected exceptions via harness."""
 
         def strict_div(a, b):
             if b == 0:
@@ -95,14 +103,13 @@ class TestFunctionWorkflow:
         Submission.submit(strict_div)
         case = TestCase(inputs=((1, 0), {}), expected=((), {}), raises=True)
 
-        # Execute — raises flag means exception is captured, not re-raised
-        try:
-            outputs = execute(Submission.submission, case)
-        except ZeroDivisionError:
-            outputs = ZeroDivisionError("no zero")
+        # The harness test_execution catches the exception when raises=True
+        tc, result = HarnessClass.test_execution.__wrapped__(HarnessClass(), Submission.submission, case, verbosity=0)
+        assert isinstance(result, ZeroDivisionError)
 
-        result, message = raises(case, outputs, ZeroDivisionError)
-        assert result is pytest.ExitCode.OK
+        # Now verify the raises assertion accepts it
+        exit_code, message = raises(tc, result, ZeroDivisionError)
+        assert exit_code is pytest.ExitCode.OK
 
 
 # ---------------------------------------------------------------------------
