@@ -90,6 +90,16 @@ class TestExecution:
         with pytest.raises(pytest.fail.Exception):
             self._call(boom, case)
 
+    def test_raises_false_verbose_includes_traceback(self):
+        """Verbose mode includes full traceback in failure message."""
+
+        def boom():
+            raise ValueError("detailed error")
+
+        case = TestCase(inputs=((), {}), expected=((), {}), raises=False)
+        with pytest.raises(pytest.fail.Exception, match="could not be tested"):
+            self._call(boom, case, verbosity=1)
+
 
 # ---------------------------------------------------------------------------
 # test_assertion
@@ -120,4 +130,16 @@ class TestAssertion:
 
         assertions = (fn, ((), {}))
         with pytest.raises(pytest.fail.Exception):
+            HarnessClass().test_assertion((case, outputs), assertions, verbosity=0)
+
+    def test_assertion_exception_triggers_internal_error(self):
+        """Assertion function raising an exception triggers pytest.fail with INTERNAL_ERROR."""
+        case = TestCase(inputs=((), {}), expected=((), {}))
+        outputs = ((), {}, 0.1)
+
+        def fn(case, outputs, *a, **kw):
+            raise RuntimeError("assertion crashed")
+
+        assertions = (fn, ((), {}))
+        with pytest.raises(pytest.fail.Exception, match="could not be tested"):
             HarnessClass().test_assertion((case, outputs), assertions, verbosity=0)
