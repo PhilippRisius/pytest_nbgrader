@@ -103,10 +103,10 @@ def writes_file(spec, *args, name=None, created=None, deleted=None, modified=Non
         if expected is not None:
             if expected != actual:
                 logger.warning(
-                    f"Test failed: module {mode} files"
-                    f" ({', '.join(map(str, actual))}),"
-                    " but expected this exactly for files"
-                    f" ({', '.join(map(str, expected))})!"
+                    "Test failed: module %s files (%s), but expected this exactly for files (%s)!",
+                    mode,
+                    ", ".join(map(str, actual)),
+                    ", ".join(map(str, expected)),
                 )
                 result = (pytest.ExitCode.TESTS_FAILED, expected, actual)
             else:
@@ -186,7 +186,7 @@ def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
     }
 
     with ExitStack() as stack:
-        for redirect, (output, expected, target) in outputs.items():
+        for redirect, (_output, expected, target) in outputs.items():
             if expected is not None:
                 stack.enter_context(redirect(target))
         spec.loader.exec_module(module)
@@ -303,7 +303,7 @@ def has_signature(
             fun_sig.return_annotation,
         )
         if comparisons["annotation"](ref_return, fun_return) is not True:
-            logger.warning("Return annotation of " + invalid_signature(ref_return, fun_return))
+            logger.warning("Return annotation of %s", invalid_signature(ref_return, fun_return))
             result = pytest.ExitCode.TESTS_FAILED
 
     return result or pytest.ExitCode.OK

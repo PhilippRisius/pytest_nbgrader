@@ -7,6 +7,6 @@ dependencies:
   # Docs
   - sphinx >=7.1.0
   - sphinx-codeautolink >=0.16.2
+  - sphinx-autobuild
   - sphinx-copybutton
-  - sphinx-intl
   - sphinx-rtd-theme >=1.0

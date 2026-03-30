@@ -60,7 +60,8 @@ def pytest_sessionstart(session):
     cases = session.config.getoption("cases")
     if cases is not None:
         # load cases from yaml
-        assert pathlib.Path(cases).is_file(), f"{cases=} is not a file."
+        if not pathlib.Path(cases).is_file():
+            raise FileNotFoundError(f"{cases!r} is not a file.")
         with pathlib.Path(cases).open("rb") as f:
             test_cases = yaml.unsafe_load(f)
         session.config.option.test_cases = test_cases
@@ -108,7 +109,7 @@ def pytest_generate_tests(metafunc):
                 metafunc.parametrize(fixture, parameters)
 
     else:
-        warnings.warn(UserWarning("pytest-nbgrader: No data for automatic tests found."))
+        warnings.warn(UserWarning("pytest-nbgrader: No data for automatic tests found."), stacklevel=2)
 
 
 @pytest.fixture

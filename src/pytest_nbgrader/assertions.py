@@ -76,7 +76,7 @@ def _log(
         """
         result = assertion(case, outputs, *args, **kwargs)
         if result is pytest.ExitCode.OK:
-            logging.debug(f"{name} succeeded:\nExpected: {case.expected}\nActual: {outputs}\n")
+            logging.debug("%s succeeded:\nExpected: %s\nActual: %s\n", name, case.expected, outputs)
             message = ""
         else:
             result, expect, actual = result
@@ -207,7 +207,7 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
                     expected or "locally defined",
                 )
             else:
-                logging.debug(f'Test "{obj} imported from {expected.stem}" succeeded.')
+                logging.debug('Test "%s imported from %s" succeeded.', obj, expected.stem)
         elif expected is not None:
             logging.warning(invalid_import(obj, expected, None))
             result = (
@@ -216,7 +216,7 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
                 actual or "locally defined",
             )
         else:
-            logging.debug(f'Test "{obj} was locally defined" succeeded.')
+            logging.debug('Test "%s was locally defined" succeeded.', obj)
 
     return result or pytest.ExitCode.OK
 
@@ -433,7 +433,12 @@ def almost_equal(case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, *
             np.testing.assert_allclose(output, expect, atol=atol, rtol=rtol)
 
         except TypeError:
-            logging.info(f"Cannot test item {index} for near equality.\n {output = }, {expect = }\nTesting for strict equality instead.")
+            logging.info(
+                "Cannot test item %s for near equality.\n output = %s, expect = %s\nTesting for strict equality instead.",
+                index,
+                output,
+                expect,
+            )
             if expect != output:
                 result = (pytest.ExitCode.TESTS_FAILED, case.expected, outputs)
 
@@ -467,7 +472,7 @@ def raises(case, outputs, *args, **kwargs) -> Enum:
     """
     result = None
     if case.raises:
-        logging.debug(f"Execution is expected to raise {args}")
+        logging.debug("Execution is expected to raise %s", args)
         if not any(isinstance(outputs, exception) for exception in args):
             result = (pytest.ExitCode.TESTS_FAILED, args, outputs)
     return result or pytest.ExitCode.OK

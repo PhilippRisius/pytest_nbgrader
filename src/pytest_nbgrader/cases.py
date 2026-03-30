@@ -173,7 +173,7 @@ def _(submission: types.FunctionType, case) -> tuple[tuple, dict, float]:
         output_args = return_value
 
     if number_of_expected_args != len(output_args) and not case.raises:
-        logger.warning(f"Number of expected outputs ({number_of_expected_args}) does not match number of actual outputs ({len(output_args)})!")
+        logger.warning("Number of expected outputs (%s) does not match number of actual outputs (%s)!", number_of_expected_args, len(output_args))
 
     return output_args, {}, t.elapsed
 

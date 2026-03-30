@@ -32,13 +32,15 @@ def main(*args, task=None, subtask=None, case_dir="tests", auto=True, **kwargs):
         The pytest exit code.
     """
     # ensure existence of submission
-    assert loader.Submission.submission
+    if not loader.Submission.submission:
+        raise RuntimeError("No submission found. Call submit() first.")
 
     pytest_args = ["-p", "no:pytest-nbgrader"]
 
     if subtask is not None:
         cases = pathlib.Path(case_dir) / (task or "") / f"{subtask}.yml"
-        assert cases.is_file(), "Test cases could not be found."
+        if not cases.is_file():
+            raise FileNotFoundError("Test cases could not be found.")
         pytest_args.append(f"--{cases=!s}")
 
     pytest_args.extend(args)

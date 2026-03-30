@@ -11,7 +11,7 @@ class TestClass:
     """Generic pytest class."""
 
     @pytest.mark.tryfirst
-    def test_prerequisites(cls, submission, prerequisites) -> None:
+    def test_prerequisites(self, submission, prerequisites) -> None:
         """
         Run prerequisites tests against student submission.
 
@@ -33,7 +33,7 @@ class TestClass:
             )
 
     @pytest.fixture
-    def test_execution(cls, submission, cases, verbosity) -> tuple:
+    def test_execution(self, submission, cases, verbosity) -> tuple:
         """
         Run student submission on test cases.
 
@@ -67,7 +67,7 @@ class TestClass:
                 )
         return cases, result
 
-    def test_assertion(cls, test_execution, assertions, verbosity) -> None:
+    def test_assertion(self, test_execution, assertions, verbosity) -> None:
         """
         Run assertions against results of test execution.
 

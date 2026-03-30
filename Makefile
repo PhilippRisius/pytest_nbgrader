@@ -78,8 +78,8 @@ ifndef READTHEDOCS
 	$(BROWSER) docs/_build/html/index.html
 endif
 
-servedocs: docs ## compile the docs watching for changes
-	watchmedo shell-command -p '*.rst' -c '$(MAKE) -C docs html' -R -D .
+servedocs: autodoc ## compile the docs watching for changes
+	sphinx-autobuild docs docs/_build/html
 
 dist: clean ## builds source and wheel package
 	python -m flit build
