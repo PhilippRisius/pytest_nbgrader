@@ -27,8 +27,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Typing :: Typed"
+  "Programming Language :: Python :: Implementation :: CPython"
 ]
 dynamic = ["description", "version"]
 dependencies = [
@@ -49,14 +48,12 @@ dev = [
   "flit >=3.12.0,<4.0",
   "mypy >=1.18.2",
   "numpydoc >=1.9.0",
-  "pip >=25.2",
   "pre-commit >=3.5.0",
   "pytest >=8.3.2",
   "pytest-cov >=5.0.0",
   "ruff >=0.13.3",
   "tox >=4.30.3",
-  "vulture >=2.14",
-  "watchdog >=4.0.0"
+  "vulture >=2.14"
 ]
 docs = [
   # Documentation and examples
@@ -66,8 +63,8 @@ docs = [
   "nbsphinx >=0.9.5",
   "sphinx >=7.1.0,<8.2",
   "sphinx-codeautolink >=0.16.2",
+  "sphinx-autobuild",
   "sphinx-copybutton",
-  "sphinx-intl",
   "sphinx-rtd-theme >=1.0"
 ]
 all = ["pytest_nbgrader[dev]", "pytest_nbgrader[docs]"]
@@ -172,10 +169,6 @@ include = [
   "Makefile",
   "README.rst",
   "environment-docs.yml",
-  "docs/_static/_images/*.gif",
-  "docs/_static/_images/*.jpg",
-  "docs/_static/_images/*.png",
-  "docs/_static/_images/*.rst",
   "docs/Makefile",
   "docs/conf.py",
   "docs/make.bat",
@@ -188,7 +181,6 @@ exclude = [
   "__pycache__",
   ".coveralls.yml",
   ".editorconfig",
-  ".flake8",
   ".gitignore",
   ".pre-commit-config.yaml",
   ".readthedocs.yml",
@@ -196,8 +188,7 @@ exclude = [
   ".zizmor.yml",
   "docs/_*",
   "docs/apidoc/modules.rst",
-  "docs/apidoc/pytest_nbgrader*.rst",
-  "docs/locales"
+  "docs/apidoc/pytest_nbgrader*.rst"
 ]
 
 [tool.mypy]
@@ -212,15 +203,6 @@ warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = [
-  # Don't require test functions to include types
-  "tests.*"
-]
-disallow_untyped_defs = false
-disable_error_code = ["attr-defined", "assignment"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = [
   # Source modules need type annotations (TODO)
   "pytest_nbgrader.*"
 ]
@@ -230,7 +212,10 @@ ignore_errors = true
 module = [
   "tests.*"
 ]
+disallow_untyped_defs = false
+disable_error_code = ["attr-defined", "assignment"]
 ignore_errors = true
+ignore_missing_imports = true
 
 [tool.numpydoc_validation]
 checks = [
@@ -242,7 +227,6 @@ checks = [
 # remember to use single quotes for regex in TOML
 exclude = [
   # don't report on objects that match any of these regex
-  '\.undocumented_method$',
   '\.__repr__$'
 ]
 override_SS05 = [
@@ -264,7 +248,7 @@ testpaths = [
 ]
 
 [tool.ruff]
-src = ["pytest_nbgrader"]
+src = ["src"]
 line-length = 150
 exclude = [
   ".eggs",
@@ -329,12 +313,9 @@ max-complexity = 15
 [tool.ruff.lint.per-file-ignores]
 "docs/**" = ["E402"]
 "src/pytest_nbgrader/**/__init__.py" = ["F401", "F403"]
-"src/pytest_nbgrader/assertions.py" = ["G004", "S101", "B905", "PERF203"] # f-string logging (ruff auto-fix bug); assert in test helper; zip strict; try-except in loop
-"src/pytest_nbgrader/cases.py" = ["G004", "S102"] # f-string logging; exec() inherent to grading student code
-"src/pytest_nbgrader/harness.py" = ["BLE001", "N805"] # broad except catches student errors; cls is pytest convention
-"src/pytest_nbgrader/prerequisites.py" = ["G003", "G004", "B007"] # logging style; unused loop var is structural
-"src/pytest_nbgrader/runner.py" = ["S101"] # assert used for input validation
-"src/pytest_nbgrader/conftest.py" = ["S101", "B028"] # assert for validation; stacklevel in warnings.warn
+"src/pytest_nbgrader/assertions.py" = ["B905", "PERF203"] # zip strict; try-except in loop
+"src/pytest_nbgrader/cases.py" = ["S102"] # exec() inherent to grading student code
+"src/pytest_nbgrader/harness.py" = ["BLE001"] # broad except catches student errors
 "tests/**" = ["D100", "D101", "D102", "D103", "S101"]
 
 [tool.ruff.lint.pycodestyle]
