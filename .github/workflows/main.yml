@@ -1,4 +1,4 @@
-name: pytest-nbgrader Testing Suite
+name: Tests
 
 on:
   push:
