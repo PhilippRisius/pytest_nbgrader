@@ -3,7 +3,7 @@ Instructor Guide
 =================
 
 This guide covers how to create test cases, choose assertions, serialize to YAML,
-and organize grading infrastructure for a course.
+write custom test harnesses, and integrate with nbgrader's assignment pipeline.
 
 
 Defining Test Cases
