@@ -2,16 +2,6 @@
 Installation
 ============
 
-..
-    We strongly recommend installing pytest-nbgrader in an Anaconda Python environment.
-    Furthermore, due to the complexity of some packages, the default dependency solver can take a long time to resolve the environment.
-    If `mamba` is not already your default solver, consider running the following commands in order to speed up the process:
-
-        .. code-block:: console
-
-            conda install -n base conda-libmamba-solver
-            conda config --set solver libmamba
-
 If you don't have `pip`_ installed, this `Python installation guide`_ can guide you through the process.
 
 .. _pip: https://pip.pypa.io
@@ -26,12 +16,27 @@ To install pytest-nbgrader, run this command in your terminal:
 
     python -m pip install pytest_nbgrader
 
-..
-    .. code-block:: console
-
-        conda install pytest_nbgrader
-
 This is the preferred method to install pytest-nbgrader, as it will always install the most recent stable release.
+
+The plugin registers automatically with pytest on install — no additional configuration
+is needed. Any ``pytest`` invocation with the ``--cases`` flag will activate the plugin.
+
+.. important::
+
+   If you use nbgrader's ``autograde`` command on a server (e.g., JupyterHub), make sure
+   pytest-nbgrader is installed in the **grading environment** as well, not just on the
+   instructor's machine.
+
+Optional extras
+~~~~~~~~~~~~~~~
+
+For development or building documentation locally:
+
+.. code-block:: console
+
+    python -m pip install pytest_nbgrader[dev]   # linting, testing, pre-commit
+    python -m pip install pytest_nbgrader[docs]  # Sphinx and doc dependencies
+    python -m pip install pytest_nbgrader[all]   # everything
 
 
 From sources
@@ -59,22 +64,6 @@ The sources for pytest-nbgrader can be downloaded from the `Github repo`_.
 
         python -m pip install .
 
-    ..
-        .. code-block:: console
-
-            conda env create -f environment-dev.yml
-            conda activate pytest_nbgrader-dev
-            make dev
-
-        If you are on Windows, replace the ``make dev`` command with the following:
-
-        .. code-block:: console
-
-            python -m pip install -e .[dev]
-
-        Even if you do not intend to contribute to `pytest-nbgrader`, we favor using `environment-dev.yml` over `environment.yml` because it includes additional packages that are used to run all the examples provided in the documentation.
-        If for some reason you wish to install the `PyPI` version of `pytest-nbgrader` into an existing Anaconda environment (*not recommended if requirements are not met*), only run the last command above.
-
 #. When new changes are made to the `Github repo`_, if using a clone, you can update your local copy using the following commands from the root of the repository:
 
     .. code-block:: console
@@ -84,16 +73,9 @@ The sources for pytest-nbgrader can be downloaded from the `Github repo`_.
         git pull origin main
         python -m pip install .
 
-    ..
-        .. code-block:: console
-
-            git fetch
-            git checkout main
-            git pull origin main
-            conda env update -n pytest_nbgrader-dev -f environment-dev.yml
-            conda activate pytest_nbgrader-dev
-            make dev
-
-    These commands should work most of the time, but if big changes are made to the repository, you might need to remove the environment and create it again.
-
 .. _Github repo: https://github.com/PhilippRisius/pytest_nbgrader
+
+Next steps
+----------
+
+See the :doc:`usage` page for a quick start tutorial and guides for instructors and students.

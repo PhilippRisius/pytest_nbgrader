@@ -206,17 +206,6 @@ To run specific code style checks:
 
 To get ``ruff`` and ``numpydoc`` (for ``validate-docstrings``), simply install them with ``pip`` into your environment.
 
-Translations
-------------
-
-If you would like to contribute to the French translation of the documentation, you can do so by running the following command:
-
-    .. code-block:: console
-
-        make initialize-translations
-
-This will create or update the French translation files in the `docs/locales/fr/LC_MESSAGES` directory. You can then edit the `.po` files in this directory to provide translations for the documentation.
-
 Code of Conduct
 ---------------
 
