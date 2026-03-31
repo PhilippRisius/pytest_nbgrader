@@ -1,13 +1,26 @@
 """Notebook-side entry point for running pytest with test cases."""
 
+from __future__ import annotations
+
+
+__all__ = ["TemporarySymlink", "TemporarySymlinks", "main"]
+
 import pathlib
+import types as _types
 
 import pytest
 
 from pytest_nbgrader import conftest, harness, loader
 
 
-def main(*args, task=None, subtask=None, case_dir="tests", auto=True, **kwargs):
+def main(
+    *args: str,
+    task: str | None = None,
+    subtask: str | None = None,
+    case_dir: str = "tests",
+    auto: bool = True,
+    **kwargs: object,
+) -> pytest.ExitCode | int:
     """
     Wrap around pytest to inject test cases and set up config.
 
@@ -64,7 +77,11 @@ class TemporarySymlink:
         Destination filename, by default uses the module's filename.
     """
 
-    def __init__(self, module, destination=None):
+    module: _types.ModuleType
+    path: pathlib.Path
+    custom: bool
+
+    def __init__(self, module: _types.ModuleType, destination: str | None = None) -> None:
         """
         Initialize the symlink manager.
 
@@ -81,7 +98,7 @@ class TemporarySymlink:
         self.path = pathlib.Path(destination)
         self.custom = self.path.exists()
 
-    def __enter__(self):
+    def __enter__(self) -> pathlib.Path:
         """
         Create the symlink if no custom file exists.
 
@@ -94,7 +111,12 @@ class TemporarySymlink:
             self.path.symlink_to(self.module.__file__)
         return self.path
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: _types.TracebackType | None,
+    ) -> None:
         """
         Remove the symlink if it was created by this manager.
 
@@ -123,7 +145,9 @@ class TemporarySymlinks:
         Mapping of destination names to modules.
     """
 
-    def __init__(self, *args, **kwargs):
+    symlinks: list[TemporarySymlink]
+
+    def __init__(self, *args: _types.ModuleType, **kwargs: _types.ModuleType) -> None:
         """
         Initialize with modules to symlink.
 
@@ -136,7 +160,7 @@ class TemporarySymlinks:
         """
         self.symlinks = [TemporarySymlink(module) for module in args] + [TemporarySymlink(v, destination=k) for k, v in kwargs.items()]
 
-    def __enter__(self):
+    def __enter__(self) -> TemporarySymlinks:
         """
         Create all symlinks.
 
@@ -147,8 +171,14 @@ class TemporarySymlinks:
         """
         for symlink in self.symlinks:
             symlink.__enter__()
+        return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: _types.TracebackType | None,
+    ) -> None:
         """
         Remove all symlinks.
 

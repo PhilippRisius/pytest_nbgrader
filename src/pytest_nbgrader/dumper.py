@@ -1,5 +1,10 @@
 """Serialize test cases to YAML files."""
 
+from __future__ import annotations
+
+
+__all__ = ["dump_exercise", "dump_subtask", "dump_task"]
+
 import pathlib
 
 import yaml
@@ -7,7 +12,7 @@ import yaml
 from pytest_nbgrader.cases import TestSubtask
 
 
-def dump_exercise(exercise: dict[str, dict[str, TestSubtask]], to=pathlib.Path("tests")):
+def dump_exercise(exercise: dict[str, dict[str, TestSubtask]], to: pathlib.Path = pathlib.Path("tests")) -> None:
     """
     Dump all subtasks of an exercise to a directory tree.
 
@@ -23,7 +28,7 @@ def dump_exercise(exercise: dict[str, dict[str, TestSubtask]], to=pathlib.Path("
         dump_task(subtasks, to=to / task)
 
 
-def dump_task(subtasks: dict[str, TestSubtask], to: pathlib.Path):
+def dump_task(subtasks: dict[str, TestSubtask], to: pathlib.Path) -> None:
     """
     Dump all subtasks of a single task to a directory.
 
@@ -42,8 +47,8 @@ def dump_task(subtasks: dict[str, TestSubtask], to: pathlib.Path):
 def dump_subtask(
     subtask: TestSubtask,
     to: pathlib.Path = pathlib.Path("tests.yml"),
-    append=False,
-):
+    append: bool = False,
+) -> None:
     """
     Dump a single subtask to a YAML file.
 
