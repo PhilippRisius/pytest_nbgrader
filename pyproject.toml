@@ -203,7 +203,7 @@ warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = [
-  # Source modules need type annotations (TODO)
+  # Annotations added; strict enforcement deferred (many pre-existing patterns)
   "pytest_nbgrader.*"
 ]
 ignore_errors = true

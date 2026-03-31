@@ -5,6 +5,11 @@ Exports:
   Submission -- interface class to hold one `submission`
 """
 
+from __future__ import annotations
+
+
+__all__ = ["Submission"]
+
 import functools
 import importlib.machinery
 import importlib.util
@@ -17,11 +22,11 @@ class Submission:
     """Store submission object from notebooks."""
 
     #: The stored submission object.
-    submission = None
+    submission: object = None
 
     @functools.singledispatchmethod
     @classmethod
-    def submit(cls, submission):
+    def submit(cls, submission: object) -> None:
         """
         Store a generic submission.
 

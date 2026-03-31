@@ -7,7 +7,12 @@ Export classes for TestCases, listing ``*args`` and ``**kwargs`` for inputs and
 - Test: Class for executing submissions on TestCases.
 """
 
+from __future__ import annotations
+
+
 __version__ = "0.3"
+
+__all__ = ["TestCase", "TestSubtask", "Timer", "execute", "format_result"]
 
 import functools
 import importlib.machinery
@@ -27,7 +32,10 @@ logger = logging.getLogger(__name__)
 class Timer:
     """Context manager for measuring execution time."""
 
-    def __enter__(self):
+    start: float
+    end: float | None
+
+    def __enter__(self) -> Timer:
         """
         Enter the timer context and record start time.
 
@@ -40,19 +48,19 @@ class Timer:
         self.end = None
         return self
 
-    def __exit__(self, *_exc_args):
+    def __exit__(self, *_exc_args: object) -> None:
         """
         Exit the timer context and record end time.
 
         Parameters
         ----------
-        *_exc_args : tuple
+        *_exc_args : object
             Exception info passed by the context manager protocol.
         """
         self.end = perf_counter()
 
     @property
-    def elapsed(self):
+    def elapsed(self) -> float:
         """
         Return elapsed time in seconds.
 
@@ -64,7 +72,12 @@ class Timer:
         return (self.end or perf_counter()) - self.start
 
 
-def format_result(inputs, result, message=None, exception=None):
+def format_result(
+    inputs: tuple[tuple, dict],
+    result: pytest.ExitCode,
+    message: str | None = None,
+    exception: str | None = None,
+) -> str:
     """
     Format case result for logging nicely.
 
@@ -110,7 +123,7 @@ class TestCase:
     inputs: tuple[tuple, dict] = field(default_factory=lambda: (tuple(), {}))
     expected: tuple[tuple, dict] = field(default_factory=lambda: (tuple(), {}))
     raises: bool = False
-    timing: tuple = (None, None)
+    timing: tuple[float | None, float | None] = (None, None)
 
 
 @dataclass
@@ -123,7 +136,7 @@ class TestSubtask:
 
 
 @functools.singledispatch
-def execute(submission, case) -> tuple[tuple, dict, float]:
+def execute(submission: object, case: TestCase) -> tuple[tuple, dict, float]:
     """
     Execute a submission on a test case.
 
@@ -143,7 +156,7 @@ def execute(submission, case) -> tuple[tuple, dict, float]:
 
 
 @execute.register
-def _(submission: types.FunctionType, case) -> tuple[tuple, dict, float]:
+def _(submission: types.FunctionType, case: TestCase) -> tuple[tuple, dict, float]:
     """
     Execute a function submission with test case inputs.
 
@@ -179,7 +192,7 @@ def _(submission: types.FunctionType, case) -> tuple[tuple, dict, float]:
 
 
 @execute.register
-def _(submission: types.CodeType, case) -> tuple[tuple, dict, float]:
+def _(submission: types.CodeType, case: TestCase) -> tuple[tuple, dict, float]:
     """
     Execute bytecode submission with given input scope.
 
@@ -213,7 +226,7 @@ def _(submission: types.CodeType, case) -> tuple[tuple, dict, float]:
 
 
 @execute.register
-def _(submission: importlib.machinery.ModuleSpec, case) -> tuple[tuple, dict, float]:
+def _(submission: importlib.machinery.ModuleSpec, case: TestCase) -> tuple[tuple, dict, float]:
     """
     Import a module from spec and store the return object.
 
@@ -236,7 +249,7 @@ def _(submission: importlib.machinery.ModuleSpec, case) -> tuple[tuple, dict, fl
 
 
 @execute.register
-def _(submission: type, case) -> tuple[tuple, dict, float]:
+def _(submission: type, case: TestCase) -> tuple[tuple, dict, float]:
     """
     Instantiate a class submission with test case inputs.
 

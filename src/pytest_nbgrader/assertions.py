@@ -14,14 +14,34 @@ Export functions for asserting relations between student outputs and expected ou
 - equal_scope -- Is the output scope as expected (i.e. same variables present)?
 """
 
+from __future__ import annotations
+
+
 __version__ = "0.3"
+
+__all__ = [
+    "almost_equal",
+    "calls",
+    "close_attributes",
+    "equal_attributes",
+    "equal_contents",
+    "equal_scope",
+    "equal_types",
+    "equal_value",
+    "file_contents",
+    "has_import",
+    "has_method",
+    "raises",
+    "time_bounds",
+]
 
 import functools
 import inspect
 import logging
 import pathlib
 import types
-from enum import Enum
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import pytest
@@ -29,13 +49,15 @@ import pytest
 from pytest_nbgrader.cases import TestCase
 
 
+_AssertionResult = pytest.ExitCode | tuple[pytest.ExitCode, Any, Any]
+
 _SENTINEL = object()
 
 
 def _log(
-    assertion,
+    assertion: Callable[..., _AssertionResult],
     name: str = "",
-):
+) -> Callable[..., tuple[pytest.ExitCode, str]]:
     """
     Log failures and successes of running assertions.
 
@@ -54,7 +76,7 @@ def _log(
     name = f'Assertion "{name or assertion.__name__}"'
 
     @functools.wraps(assertion)
-    def wrapper(case, outputs, *args, **kwargs):
+    def wrapper(case: TestCase, outputs: object, *args: Any, **kwargs: Any) -> tuple[pytest.ExitCode, str]:
         """
         Append a message to the test result.
 
@@ -88,7 +110,7 @@ def _log(
 
 
 @_log
-def close_attributes(case: TestCase, outputs, *args, **kwargs):
+def close_attributes(case: TestCase, outputs: object, *args: str, **kwargs: float) -> _AssertionResult:
     """
     Assert close values for given attributes between expected and outputs.
 
@@ -117,16 +139,19 @@ def close_attributes(case: TestCase, outputs, *args, **kwargs):
 
 
 @_log
-def has_import(case: TestCase, *args, **kwargs) -> Enum:
+def has_import(case: TestCase, outputs: tuple, *args: pathlib.Path, **kwargs: pathlib.Path | None) -> _AssertionResult:
     """
     Test if an object has a module-level import.
 
     Parameters
     ----------
     case : TestCase
-        Test case whose ``return_object`` is inspected.
+        Test case with expected outputs.
+    outputs : tuple
+        Actual outputs ``(positional, named, elapsed)`` from student submission.
+        The return object is taken from ``outputs[0][0]``.
     *args : pathlib.Path
-        Expected import paths to check.
+        Expected import paths to check (positional).
     **kwargs : pathlib.Path or None
         Mapping of object names to expected import paths (None = locally defined).
 
@@ -135,12 +160,8 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
     Enum
         ``pytest.ExitCode.OK`` if all imports match, otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    # TODO: collect results and yield a suitable return message
-    #       with all discrepancies.
 
-    import pathlib
-
-    def invalid_import(name, expected=None, actual=None):
+    def invalid_import(name: str, expected: object = None, actual: object = None) -> str:
         """
         Format message for warning about invalid imports.
 
@@ -165,11 +186,34 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
             message += f" from expected location.\n expected: {expected}, actual: {actual}"
         return message + "."
 
+    def _resolve_origin(module: types.ModuleType) -> pathlib.Path:
+        """
+        Return the origin path of a module, relative to cwd if possible.
+
+        Parameters
+        ----------
+        module : types.ModuleType
+            The module whose origin to resolve.
+
+        Returns
+        -------
+        pathlib.Path
+            The module's origin path, relative to cwd when possible.
+        """
+        origin = pathlib.Path(module.__spec__.origin)
+        try:
+            return origin.relative_to(pathlib.Path.cwd())
+        except ValueError:
+            return origin
+
+    if not outputs[0]:
+        return pytest.ExitCode.TESTS_FAILED, "expected object", "no return object"
+
+    return_obj = outputs[0][0]
     result = None
-    cwd = pathlib.Path.cwd()
 
     for expected in args:
-        actual = inspect.getmodule(getattr(case.return_object, expected))
+        actual = inspect.getmodule(getattr(return_obj, expected))
         if actual is None:
             logging.warning(invalid_import(expected.stem, expected, "not imported"))
             result = (
@@ -178,21 +222,19 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
                 "not imported",
             )
         else:
-            actual_name = actual.__spec__.name
-            actual_origin = pathlib.Path(actual.__spec__.origin).relative_to(cwd)
-            if (expected.stem, expected) != (actual_name, actual_origin):
+            actual_origin = _resolve_origin(actual)
+            if (expected.stem, expected) != (actual.__spec__.name, actual_origin):
                 logging.warning(invalid_import(expected.stem, expected, actual_origin))
                 result = (
                     pytest.ExitCode.TESTS_FAILED,
                     expected.stem,
-                    actual_name,
+                    actual.__spec__.name,
                 )
 
     for obj, expected in kwargs.items():
-        actual = inspect.getmodule(getattr(case.return_object, obj))
+        actual = inspect.getmodule(getattr(return_obj, obj))
         if actual is not None:
-            actual_name = actual.__spec__.name
-            actual_origin = pathlib.Path(actual.__spec__.origin).relative_to(cwd)
+            actual_origin = _resolve_origin(actual)
             if expected is None:
                 logging.warning(invalid_import(obj, None, actual_origin))
                 result = (
@@ -200,11 +242,12 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
                     "locally defined",
                     actual_origin,
                 )
-            elif (expected.stem, expected) != (actual_name, actual_origin):
+            elif (expected.stem, expected) != (actual.__spec__.name, actual_origin):
                 logging.warning(invalid_import(obj, expected, actual_origin))
                 result = (
                     pytest.ExitCode.TESTS_FAILED,
-                    expected or "locally defined",
+                    expected,
+                    actual_origin,
                 )
             else:
                 logging.debug('Test "%s imported from %s" succeeded.', obj, expected.stem)
@@ -213,7 +256,7 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
             result = (
                 pytest.ExitCode.TESTS_FAILED,
                 expected,
-                actual or "locally defined",
+                "not imported",
             )
         else:
             logging.debug('Test "%s was locally defined" succeeded.', obj)
@@ -222,7 +265,7 @@ def has_import(case: TestCase, *args, **kwargs) -> Enum:
 
 
 @_log
-def equal_attributes(case: TestCase, outputs, *args, **kwargs) -> Enum:
+def equal_attributes(case: TestCase, outputs: tuple, *args: str, **kwargs: object) -> _AssertionResult:
     """
     Test if all attributes of expected and actual return object are equal.
 
@@ -257,7 +300,7 @@ def equal_attributes(case: TestCase, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def has_method(case: TestCase, outputs, *args, **kwargs) -> Enum:
+def has_method(case: TestCase, outputs: tuple, *args: str, **kwargs: type) -> _AssertionResult:
     """
     Test if return object has given methods/attributes.
 
@@ -297,7 +340,7 @@ def has_method(case: TestCase, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def calls(case: TestCase, outputs, caller, **callees):
+def calls(case: TestCase, outputs: tuple, caller: str, **callees: list[tuple[tuple, dict]]) -> _AssertionResult:
     """
     Test if function 'caller' of imported module calls callees in the prescribed manner.
 
@@ -347,7 +390,7 @@ def calls(case: TestCase, outputs, caller, **callees):
 
 
 @_log
-def equal_contents(case, outputs, *args, **kwargs) -> Enum:
+def equal_contents(case: TestCase, outputs: tuple, *args: str, **kwargs: object) -> _AssertionResult:
     """
     Test if containers have equal contents between actual and expected outputs.
 
@@ -394,7 +437,7 @@ def equal_contents(case, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def almost_equal(case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, **kwargs) -> Enum:
+def almost_equal(case: TestCase, outputs: tuple, *args: str, atol: float = 1e-7, rtol: float = 1e-7, **kwargs: object) -> _AssertionResult:
     """
     Test for closeness between actual and expected TestCase outputs.
 
@@ -449,7 +492,7 @@ def almost_equal(case, outputs, *args, atol: float = 1e-7, rtol: float = 1e-7, *
 
 
 @_log
-def raises(case, outputs, *args, **kwargs) -> Enum:
+def raises(case: TestCase, outputs: tuple | Exception, *args: type[Exception], **kwargs: object) -> _AssertionResult:
     """
     Test if case raised an exception as prescribed.
 
@@ -479,7 +522,7 @@ def raises(case, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def file_contents(case: TestCase, *args, **kwargs) -> Enum:
+def file_contents(case: TestCase, outputs: tuple, *args: object, **kwargs: object) -> _AssertionResult:
     """
     Test if files in TestCase.expected[1] have the prescribed contents.
 
@@ -487,6 +530,8 @@ def file_contents(case: TestCase, *args, **kwargs) -> Enum:
     ----------
     case : TestCase
         Test case with ``expected[1]`` mapping filenames to expected contents.
+    outputs : tuple
+        Actual outputs from student submission (unused by this assertion).
     *args : tuple
         Unused positional arguments.
     **kwargs : dict
@@ -514,7 +559,7 @@ def file_contents(case: TestCase, *args, **kwargs) -> Enum:
 
 
 @_log
-def equal_value(case, outputs, *args, **kwargs) -> Enum:
+def equal_value(case: TestCase, outputs: tuple, *args: str, **kwargs: object) -> _AssertionResult:
     """
     Test for exact equality between expected and actual TestCase outputs.
 
@@ -551,7 +596,7 @@ def equal_value(case, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def equal_types(case, outputs, *args, **kwargs) -> Enum:
+def equal_types(case: TestCase, outputs: tuple, *args: str, **kwargs: object) -> _AssertionResult:
     """
     Test for equal types between expected and actual TestCase outputs.
 
@@ -583,7 +628,7 @@ def equal_types(case, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def equal_scope(case, outputs, *args, **kwargs) -> Enum:
+def equal_scope(case: TestCase, outputs: tuple, *args: object, **kwargs: object) -> _AssertionResult:
     """
     Test for equal scope between expected and actual TestCase outputs.
 
@@ -615,7 +660,7 @@ def equal_scope(case, outputs, *args, **kwargs) -> Enum:
 
 
 @_log
-def time_bounds(case, outputs, *args, **kwargs) -> Enum:
+def time_bounds(case: TestCase, outputs: tuple, *args: object, **kwargs: object) -> _AssertionResult:
     """
     Test for execution time within bounds, if provided.
 

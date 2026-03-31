@@ -1,17 +1,22 @@
 """Check submissions with pytest and fixtures."""
 
+from __future__ import annotations
+
+
+__all__ = ["TestClass"]
+
 import traceback
 
 import pytest
 
-from pytest_nbgrader.cases import execute, format_result
+from pytest_nbgrader.cases import TestCase, execute, format_result
 
 
 class TestClass:
     """Generic pytest class."""
 
     @pytest.mark.tryfirst
-    def test_prerequisites(self, submission, prerequisites) -> None:
+    def test_prerequisites(self, submission: object, prerequisites: tuple) -> None:
         """
         Run prerequisites tests against student submission.
 
@@ -33,7 +38,7 @@ class TestClass:
             )
 
     @pytest.fixture
-    def test_execution(self, submission, cases, verbosity) -> tuple:
+    def test_execution(self, submission: object, cases: TestCase, verbosity: int) -> tuple[TestCase, tuple[tuple, dict, float] | Exception]:
         """
         Run student submission on test cases.
 
@@ -67,7 +72,7 @@ class TestClass:
                 )
         return cases, result
 
-    def test_assertion(self, test_execution, assertions, verbosity) -> None:
+    def test_assertion(self, test_execution: tuple, assertions: tuple, verbosity: int) -> None:
         """
         Run assertions against results of test execution.
 

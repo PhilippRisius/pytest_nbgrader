@@ -12,6 +12,18 @@ pytest fixtures:
 PYTEST_DONT_REWRITE
 """
 
+from __future__ import annotations
+
+
+__all__ = [
+    "pytest_addoption",
+    "pytest_generate_tests",
+    "pytest_sessionfinish",
+    "pytest_sessionstart",
+    "submission",
+    "verbosity",
+]
+
 import pathlib
 import warnings
 
@@ -20,7 +32,7 @@ import pytest
 import pytest_nbgrader
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser: pytest.Parser) -> None:
     """
     Add custom options for test case location and auto-generation.
 
@@ -45,7 +57,7 @@ def pytest_addoption(parser):
     )
 
 
-def pytest_sessionstart(session):
+def pytest_sessionstart(session: pytest.Session) -> None:
     """
     Collect manual and automatic test cases.
 
@@ -77,7 +89,7 @@ def pytest_sessionstart(session):
         session.config.option.test_cases = None
 
 
-def pytest_sessionfinish(session):
+def pytest_sessionfinish(session: pytest.Session) -> None:
     """
     Unlink the previously generated tests file at session finish.
 
@@ -90,7 +102,7 @@ def pytest_sessionfinish(session):
         session.config.option.auto.unlink()
 
 
-def pytest_generate_tests(metafunc):
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """
     Programmatically generate tests from deserialized test cases.
 
@@ -113,7 +125,7 @@ def pytest_generate_tests(metafunc):
 
 
 @pytest.fixture
-def verbosity(request):
+def verbosity(request: pytest.FixtureRequest) -> int:
     """
     Inject verbosity from global config.
 
@@ -131,7 +143,7 @@ def verbosity(request):
 
 
 @pytest.fixture
-def submission():
+def submission() -> object:
     """
     Inject submission object into pytest as fixture.
 

@@ -1,5 +1,8 @@
 """Pytest plugin for using with nbgrader and generating test cases."""
 
+from __future__ import annotations
+
+
 ###################################################################################
 # MIT License
 #
@@ -27,5 +30,7 @@
 __author__ = """Philipp Emmo Tobias Risius"""
 __email__ = "philipp.e.risius@theo.physik.uni-giessen.de"
 __version__ = "0.2.0"
+
+__all__ = ["__version__", "harness", "loader"]
 
 from . import harness, loader

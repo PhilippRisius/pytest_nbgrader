@@ -7,13 +7,21 @@ Export functions for asserting properties of student code:
 Might in the future test for static attributes or methods of classes
 """
 
+from __future__ import annotations
+
+
 __version__ = "0.3"
+
+__all__ = ["has_signature", "writes", "writes_file"]
 
 import importlib.util
 import inspect
 import io
 import logging
-from enum import Enum
+import os
+import pathlib
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 
@@ -21,7 +29,14 @@ import pytest
 logger = logging.getLogger()
 
 
-def writes_file(spec, *args, name=None, created=None, deleted=None, modified=None) -> Enum:
+def writes_file(
+    spec: importlib.machinery.ModuleSpec,
+    *args: object,
+    name: str | None = None,
+    created: set[pathlib.Path] | None = None,
+    deleted: set[pathlib.Path] | None = None,
+    modified: set[pathlib.Path] | None = None,
+) -> pytest.ExitCode | tuple[pytest.ExitCode, Any, Any]:
     """
     Test file writes of module execution as ``name``.
 
@@ -46,9 +61,8 @@ def writes_file(spec, *args, name=None, created=None, deleted=None, modified=Non
         ``pytest.ExitCode.OK`` if file operations match expectations,
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    import pathlib
 
-    def recursive_stats(path: pathlib.Path, return_dict=None):
+    def recursive_stats(path: pathlib.Path, return_dict: dict[pathlib.Path, os.stat_result] | None = None) -> dict[pathlib.Path, os.stat_result]:
         """
         Recursively gather file paths and stats in subdirs.
 
@@ -118,7 +132,14 @@ def writes_file(spec, *args, name=None, created=None, deleted=None, modified=Non
     return result or pytest.ExitCode.OK
 
 
-def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
+def writes(
+    spec: importlib.machinery.ModuleSpec,
+    *args: object,
+    name: str | None = None,
+    out: str | None = None,
+    err: str | None = None,
+    **kwargs: object,
+) -> pytest.ExitCode:
     """
     Test stdout and stderr writes of module execution as ``name``.
 
@@ -145,7 +166,7 @@ def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
     """
     from contextlib import ExitStack, redirect_stderr, redirect_stdout
 
-    def message(name, output, actual, expected):
+    def message(name: str, output: str, actual: str, expected: str) -> str:
         """
         Format message for warning.
 
@@ -208,12 +229,12 @@ def writes(spec, *args, name=None, out=None, err=None, **kwargs) -> Enum:
 
 
 def has_signature(
-    function: callable,
+    function: Callable[..., Any],
     ref_sig: inspect.Signature,
-    *strict_comparisons,
-    compare_names: callable = list.__eq__,
-    **comparisons,
-):
+    *strict_comparisons: str,
+    compare_names: Callable[[list[str], list[str]], bool] = list.__eq__,
+    **comparisons: Callable[[Any, Any], bool],
+) -> pytest.ExitCode:
     """
     Test if function is compatible with passed signature.
 
@@ -237,7 +258,7 @@ def has_signature(
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
 
-    def invalid_signature(expected, actual):
+    def invalid_signature(expected: object, actual: object) -> str:
         """
         Format message for warnings.
 

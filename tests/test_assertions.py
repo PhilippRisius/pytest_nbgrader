@@ -492,10 +492,7 @@ class TestFileContents:
 
 
 # ---------------------------------------------------------------------------
-# has_import — uses case.return_object (dynamic attribute)
-# Note: has_import has @_log but its inner function signature is
-# (case, *args, **kwargs), so `outputs` from the wrapper gets swept
-# into *args. We test the inner function directly via __wrapped__.
+# has_import (FIXED: normalized to standard pipeline with @_log)
 # ---------------------------------------------------------------------------
 
 
@@ -504,24 +501,18 @@ class TestHasImport:
     Tests for has_import assertion.
 
     has_import uses inspect.getmodule() to determine where objects come from.
-    It has several known issues (relative_to(cwd) crashes for stdlib modules,
-    outputs parameter not handled, inconsistent return tuples). We test via
-    __wrapped__ to bypass the _log wrapper's outputs injection.
-
     Tests use objects with no __module__ (getmodule returns None) to simulate
     the "locally defined" case, and project-local imports for the "imported" case.
     """
 
     def test_locally_defined_no_module(self):
         """Object with no discoverable module — expected=None passes."""
-        # Create a class with __module__ pointing to nonexistent module
-        # so inspect.getmodule() returns None
         obj = type("Foo", (), {})
         obj.__module__ = "_nonexistent_test_module_"
 
         case = make_case()
-        case.return_object = _Obj(Foo=obj)
-        result = assertions.has_import.__wrapped__(case, Foo=None)
+        outputs = ((_Obj(Foo=obj),), {}, 0.0)
+        result, _ = assertions.has_import(case, outputs, Foo=None)
         assert result is pytest.ExitCode.OK
 
     def test_locally_defined_but_expected_imported(self):
@@ -530,17 +521,33 @@ class TestHasImport:
         obj.__module__ = "_nonexistent_test_module_"
 
         case = make_case()
-        case.return_object = _Obj(Foo=obj)
-        result = assertions.has_import.__wrapped__(case, Foo=pathlib.Path("some_module.py"))
-        assert result is not pytest.ExitCode.OK
+        outputs = ((_Obj(Foo=obj),), {}, 0.0)
+        result, _ = assertions.has_import(case, outputs, Foo=pathlib.Path("some_module.py"))
+        assert result is pytest.ExitCode.TESTS_FAILED
 
     def test_imported_but_expected_local(self):
         """Object from a real module but expected=None — fails."""
         case = make_case()
-        # TestCase is from pytest_nbgrader.cases (project-local, under CWD)
-        case.return_object = _Obj(TC=TestCase)
-        result = assertions.has_import.__wrapped__(case, TC=None)
-        assert result is not pytest.ExitCode.OK
+        outputs = ((_Obj(TC=TestCase),), {}, 0.0)
+        result, _ = assertions.has_import(case, outputs, TC=None)
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_stdlib_import_no_crash(self):
+        """Stdlib module (outside CWD) should not crash with ValueError."""
+        import os
+
+        case = make_case()
+        outputs = ((_Obj(os=os),), {}, 0.0)
+        # os is from stdlib — relative_to(cwd) would crash without the fix
+        result, _ = assertions.has_import(case, outputs, os=None)
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_empty_outputs(self):
+        """Empty positional outputs — returns failure."""
+        case = make_case()
+        outputs = ((), {}, 0.0)
+        result, _ = assertions.has_import(case, outputs, Foo=None)
+        assert result is pytest.ExitCode.TESTS_FAILED
 
 
 # ---------------------------------------------------------------------------
