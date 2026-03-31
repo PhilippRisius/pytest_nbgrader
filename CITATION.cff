@@ -20,4 +20,4 @@ contact:
 repository-code: "https://github.com/PhilippRisius/pytest_nbgrader"
 abstract: "Pytest plugin for using with nbgrader and generating test cases."
 license: "MIT"
-version: "0.2.0"
+version: "0.3.0-dev.0"
