@@ -7,6 +7,8 @@ updates:
     directory: /.github/workflows
     schedule:
       interval: "quarterly"
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns:
@@ -16,6 +18,8 @@ updates:
     directory: /
     schedule:
       interval: "quarterly"
+    cooldown:
+      default-days: 7
     groups:
       ci:
         patterns:

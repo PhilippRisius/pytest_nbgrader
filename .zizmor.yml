@@ -4,3 +4,8 @@ rules:
       - label.yml:9
       - first-pull-request.yml:3
       - workflow-warning.yml:3
+  superfluous-actions:
+    ignore:
+      - tag-testpypi.yml:37
+      - workflow-warning.yml:49
+      - workflow-warning.yml:70
