@@ -62,7 +62,7 @@ class Timer:
     @property
     def elapsed(self) -> float:
         """
-        Return elapsed time in seconds.
+        Elapsed time in seconds.
 
         Returns
         -------
