@@ -5,9 +5,12 @@ from __future__ import annotations
 
 __all__ = ["dump_exercise", "dump_subtask", "dump_task"]
 
+import importlib
 import os
 import pathlib
+import sys
 import types
+from collections.abc import Mapping, Sequence
 
 import yaml
 
@@ -37,12 +40,23 @@ def _represent_function(dumper: yaml.Dumper, function: types.FunctionType) -> ya
     Raises
     ------
     yaml.representer.RepresenterError
-        If the function is defined in ``__main__`` or is a lambda or local function. Such
-        references would resolve to the student's namespace, or not at all, when loaded.
+        If the function cannot be imported by its module and name, e.g. a lambda, a local
+        function, a method, or a function defined in ``__main__`` (which would resolve to the
+        student's namespace when loaded).
     """
-    if function.__module__ == "__main__" or "<" in function.__qualname__:
+    module_name, qualname = function.__module__, function.__qualname__
+    importable = module_name != "__main__" and "<" not in qualname
+    if importable:
+        # PyYAML writes <module>.<__name__>, which must resolve to the same function when loaded
+        try:
+            module = sys.modules.get(module_name) or importlib.import_module(module_name)
+        except ImportError:
+            importable = False
+        else:
+            importable = getattr(module, function.__name__, None) is function
+    if not importable:
         raise yaml.representer.RepresenterError(
-            f"cannot dump {function.__module__}.{function.__qualname__}: functions used in test cases must be defined in an importable module"
+            f"cannot dump {module_name}.{qualname}: functions used in test cases must be defined at the top level of an importable module"
         )
     return dumper.represent_name(function)
 
@@ -68,6 +82,27 @@ def _represent_path(dumper: yaml.Dumper, path: pathlib.PurePath) -> yaml.Node:
 
 _Dumper.add_representer(types.FunctionType, _represent_function)
 _Dumper.add_multi_representer(pathlib.PurePath, _represent_path)
+
+
+def _merged(existing: Mapping | Sequence, new: Mapping | Sequence) -> dict | list:
+    """
+    Merge prerequisites or assertions, given as dicts or as lists of ``(key, value)`` pairs.
+
+    Parameters
+    ----------
+    existing : Mapping or Sequence
+        Stored items.
+    new : Mapping or Sequence
+        Items to add; they replace stored items with the same key if both are dicts.
+
+    Returns
+    -------
+    dict or list
+        The merged items: a dict if both are dicts, otherwise a list of pairs.
+    """
+    if isinstance(existing, Mapping) and isinstance(new, Mapping):
+        return {**existing, **new}
+    return [*(existing.items() if isinstance(existing, Mapping) else existing), *(new.items() if isinstance(new, Mapping) else new)]
 
 
 def dump_exercise(exercise: dict[str, dict[str, TestSubtask]], to: str | os.PathLike[str] = pathlib.Path("tests")) -> None:
@@ -129,8 +164,8 @@ def dump_subtask(
             existing = yaml.unsafe_load(f)
         subtask = TestSubtask(
             cases=[*existing.cases, *subtask.cases],
-            assertions={**existing.assertions, **subtask.assertions},
-            prerequisites={**getattr(existing, "prerequisites", {}), **subtask.prerequisites},
+            assertions=_merged(existing.assertions, subtask.assertions),
+            prerequisites=_merged(getattr(existing, "prerequisites", {}), subtask.prerequisites),
         )
     # sort_keys=False keeps the order of dicts (e.g. inputs), which the expected outputs may depend on
     serialized = yaml.dump(subtask, Dumper=_Dumper, encoding="utf-8", sort_keys=False)

@@ -246,3 +246,20 @@ class TestAssertion:
         with pytest.raises(pytest.fail.Exception, match="1, 2; 3, 4") as excinfo:
             HarnessClass().test_assertion((case, ((), {}, 0.0)), (fn, ((), {})), verbosity=0)
         assert "attribute differs" in str(excinfo.value)
+
+
+class TestReviewRegressions:
+    """Regressions found while reviewing the fixes above."""
+
+    def test_custom_assertion_receives_exception(self):
+        """Assertions without accepts_exceptions = False receive the exception, as before."""
+        case = TestCase(inputs=((1, 0), {}), expected=((), {}), raises=True)
+        received = []
+
+        def check_message(case, outputs, *a, **kw):
+            received.append(outputs)
+            return (pytest.ExitCode.TESTS_FAILED, "expected a ValueError")
+
+        with pytest.raises(pytest.fail.Exception, match="expected a ValueError"):
+            HarnessClass().test_assertion((case, ZeroDivisionError("x")), (check_message, ((), {})), verbosity=0)
+        assert isinstance(received[0], ZeroDivisionError)

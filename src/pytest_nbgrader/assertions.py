@@ -35,6 +35,7 @@ __all__ = [
     "time_bounds",
 ]
 
+import contextlib
 import functools
 import inspect
 import itertools
@@ -42,7 +43,7 @@ import logging
 import pathlib
 import types
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import numpy as np
@@ -79,15 +80,14 @@ def _equal(actual: object, expected: object) -> bool:
             return bool(np.array_equal(actual, expected))
         except (TypeError, ValueError):
             return False
-    try:
+    with contextlib.suppress(TypeError, ValueError):
         return bool(actual == expected)
-    except (TypeError, ValueError):
-        # e.g. containers holding numpy arrays, whose == is element-wise
-        try:
-            np.testing.assert_equal(actual, expected)
-        except (AssertionError, TypeError, ValueError):
-            return False
-        return True
+    # e.g. containers holding numpy arrays, whose == is element-wise: compare item by item
+    if isinstance(actual, dict) and isinstance(expected, dict):
+        return actual.keys() == expected.keys() and all(_equal(actual[key], expected[key]) for key in expected)
+    if (isinstance(actual, list) and isinstance(expected, list)) or (isinstance(actual, tuple) and isinstance(expected, tuple)):
+        return len(actual) == len(expected) and all(_equal(a, e) for a, e in zip(actual, expected, strict=True))
+    return False
 
 
 def _close(actual: object, expected: object, **tolerances: float) -> bool:
@@ -141,13 +141,12 @@ def _is_harness_output(outputs: object) -> bool:
     return isinstance(outputs, tuple) and len(outputs) == 3 and isinstance(outputs[0], tuple) and isinstance(outputs[1], dict)
 
 
-def _object_pairs(case: TestCase, outputs: object) -> list[tuple[object, object]]:
+def _objects(case: TestCase, outputs: object) -> tuple[Sequence, Sequence]:
     """
-    Pair each actual object with its expected counterpart.
+    Return the actual and expected objects to compare attribute by attribute.
 
     Harness-shaped outputs and ``(args, kwargs)``-shaped expectations are unpacked; bare objects
-    (as passed by custom harnesses) are used as they are. Missing objects on either side are
-    represented by a sentinel.
+    (as passed by custom harnesses) are used as they are.
 
     Parameters
     ----------
@@ -158,16 +157,16 @@ def _object_pairs(case: TestCase, outputs: object) -> list[tuple[object, object]
 
     Returns
     -------
-    list of tuple
-        ``(actual, expected)`` pairs.
+    tuple
+        ``(actual_objects, expected_objects)``.
     """
     expected = case.expected
-    if isinstance(expected, tuple) and len(expected) == 2 and isinstance(expected[0], tuple) and isinstance(expected[1], dict):
+    if isinstance(expected, (tuple, list)) and len(expected) == 2 and isinstance(expected[0], (tuple, list)) and isinstance(expected[1], dict):
         expected_objects = expected[0]
     else:
         expected_objects = (expected,)
     actual_objects = outputs[0] if _is_harness_output(outputs) else (outputs,)
-    return list(itertools.zip_longest(actual_objects, expected_objects, fillvalue=_SENTINEL))
+    return actual_objects, expected_objects
 
 
 def _undefined(outputs: tuple, names: tuple[str, ...]) -> list[str]:
@@ -305,11 +304,11 @@ def close_attributes(case: TestCase, outputs: object, *args: str, **kwargs: floa
     Enum
         ``pytest.ExitCode.OK`` on success, or a failure tuple.
     """
-    pairs = _object_pairs(case, outputs)
-    if not pairs or any(actual is _SENTINEL or expected is _SENTINEL for actual, expected in pairs):
-        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+    actual_objects, expected_objects = _objects(case, outputs)
+    if not actual_objects or len(actual_objects) != len(expected_objects):
+        return pytest.ExitCode.TESTS_FAILED, f"{len(expected_objects)} object(s)", f"{len(actual_objects)} object(s)"
 
-    for actual, expected in pairs:
+    for actual, expected in zip(actual_objects, expected_objects, strict=True):
         for attribute in args:
             try:
                 if not _close(getattr(actual, attribute), getattr(expected, attribute), **kwargs):
@@ -478,11 +477,11 @@ def equal_attributes(case: TestCase, outputs: tuple, *args: str, **kwargs: objec
     Enum
         ``pytest.ExitCode.OK`` if equal, otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    pairs = _object_pairs(case, outputs)
-    if not pairs or any(actual is _SENTINEL or expected is _SENTINEL for actual, expected in pairs):
-        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+    actual_objects, expected_objects = _objects(case, outputs)
+    if not actual_objects or len(actual_objects) != len(expected_objects):
+        return pytest.ExitCode.TESTS_FAILED, f"{len(expected_objects)} object(s)", f"{len(actual_objects)} object(s)"
 
-    for actual, expected in pairs:
+    for actual, expected in zip(actual_objects, expected_objects, strict=True):
         for attr in args:
             if not hasattr(actual, attr) or not _equal(getattr(actual, attr), getattr(expected, attr, _SENTINEL)):
                 return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
@@ -698,10 +697,6 @@ def raises(case: TestCase, outputs: tuple | Exception, *args: type[Exception], *
     return result or pytest.ExitCode.OK
 
 
-# The harness passes exceptions raised in ``raises=True`` cases only to assertions that accept them.
-raises.accepts_exceptions = True  # type: ignore[attr-defined]
-
-
 @_log
 def file_contents(case: TestCase, outputs: tuple, *args: object, **kwargs: object) -> _AssertionResult:
     """
@@ -881,3 +876,23 @@ def time_bounds(case: TestCase, outputs: tuple, *args: object, **kwargs: object)
         )
 
     return result or pytest.ExitCode.OK
+
+
+# In ``raises=True`` cases the harness passes the raised exception as ``outputs``. These assertions
+# compare values and do not apply to exceptions, so the harness does not call them in that case.
+# Custom assertions without this attribute receive the exception.
+for _assertion in (
+    almost_equal,
+    calls,
+    close_attributes,
+    equal_attributes,
+    equal_contents,
+    equal_scope,
+    equal_types,
+    equal_value,
+    file_contents,
+    has_import,
+    has_method,
+    time_bounds,
+):
+    _assertion.accepts_exceptions = False  # type: ignore[attr-defined]

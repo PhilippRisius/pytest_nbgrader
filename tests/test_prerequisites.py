@@ -558,3 +558,70 @@ class TestHasSignatureRegressions:
 
         has_signature(func, inspect.signature(ref), annotation=compare)
         assert calls == [(bool, int), (bool, int)]
+
+
+class Node:
+    """Class referenced by string (forward reference) annotations."""
+
+
+class TestReviewRegressions:
+    """Regressions found while reviewing the fixes above."""
+
+    def test_same_second_rewrite_is_modification(self, tmp_path, monkeypatch):
+        """A same-size rewrite within the same second (mtimes differ only below a second) is detected."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        answer = workdir / "answer.txt"
+        answer.write_text("00")
+        second = 1_700_000_000 * 10**9
+        os.utime(answer, ns=(second, second))
+        monkeypatch.chdir(workdir)
+        later = second + 500_000_000
+        code = f"import os, pathlib\npathlib.Path('answer.txt').write_text('42')\nos.utime('answer.txt', ns=({later}, {later}))\n"
+        spec = _make_spec(tmp_path, "same_second", code)
+        assert writes_file(spec, modified={pathlib.Path("answer.txt")}) == pytest.ExitCode.OK
+
+    def test_writes_through_symlinked_directory(self, tmp_path, monkeypatch):
+        """Files written through a symlinked directory are detected."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        (tmp_path / "shared").mkdir()
+        (workdir / "data").symlink_to(tmp_path / "shared")
+        (workdir / "loop").symlink_to(workdir)  # a symlink loop is harmless
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, "linked_writer", "import pathlib; pathlib.Path('data/result.txt').write_text('x')")
+        assert writes_file(spec, created={pathlib.Path("data/result.txt")}) == pytest.ExitCode.OK
+
+    def test_string_annotations_on_both_sides(self, tmp_path):
+        """Postponed annotations in reference and submission compare equal."""
+        code = "from __future__ import annotations\n\ndef area(r: float) -> float:\n    return r\n"
+        reference = _make_spec(tmp_path, "reference_area", code)
+        submission = _make_spec(tmp_path, "submission_area", code)
+        modules = []
+        for spec in (reference, submission):
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            modules.append(module)
+        assert has_signature(modules[1].area, inspect.signature(modules[0].area), "annotation") == pytest.ExitCode.OK
+
+    def test_forward_references(self):
+        """Forward references in reference and submission compare equal."""
+
+        def ref_insert(node: "Node", value: int) -> "Node":
+            return node
+
+        def insert(node: "Node", value: int) -> "Node":
+            return node
+
+        assert has_signature(insert, inspect.signature(ref_insert), "annotation") == pytest.ExitCode.OK
+
+    def test_wrong_annotation_still_fails(self, tmp_path):
+        """Evaluating annotations does not make wrong annotations pass."""
+        spec = _make_spec(tmp_path, "wrong_area", "from __future__ import annotations\n\ndef area(r: int) -> int:\n    return r\n")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def reference(r: float) -> float:
+            return r
+
+        assert has_signature(module.area, inspect.signature(reference), "annotation") == pytest.ExitCode.TESTS_FAILED

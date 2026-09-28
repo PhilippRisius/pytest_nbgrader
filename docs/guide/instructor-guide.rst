@@ -96,9 +96,11 @@ To test that code raises an exception, set ``raises=True``:
    )
 
 Use the ``raises`` assertion to verify the exception type (see :doc:`assertions-reference`).
-``raises=True`` cases may share a subtask with ordinary cases: other assertions (such as
-``equal_value``) are not applied to the exception, and a submission that does not raise
-fails the ``raises`` assertion.
+``raises=True`` cases may share a subtask with ordinary cases: the built-in value assertions
+(such as ``equal_value``) are not applied to the exception, and a submission that does not
+raise fails the ``raises`` assertion. Custom assertions receive the exception as ``outputs``;
+set ``my_assertion.accepts_exceptions = False`` on a custom value assertion to skip it for
+such cases instead.
 
 Timing Constraints
 ------------------
@@ -253,11 +255,15 @@ The ``case`` and ``outputs`` arguments are passed automatically by the harness.
 When pytest runs, each case is tested against **each** assertion, creating a
 Cartesian product of ``len(cases) × len(assertions)`` test nodes, plus one node per
 prerequisite (a single skipped node if there are none). A subtask needs at least one case and
-one assertion (or a prerequisite); otherwise the run fails instead of passing vacuously.
+one assertion (or a prerequisite); otherwise the run stops with a usage error instead of passing
+vacuously — unless another collected test, such as a custom harness, uses the cases.
 
 Functions used in assertions and prerequisites must be importable by the students' kernels:
-define custom assertions in a module, not in the data generation notebook. The dumper refuses
-lambdas and functions defined in ``__main__``.
+define custom assertions at the top level of a module, not in the data generation notebook.
+The dumper refuses lambdas, methods, and functions defined in ``__main__``.
+
+Instead of a dict, assertions and prerequisites may also be a list of
+``(function, (args, kwargs))`` pairs.
 
 Generating Test Cases Programmatically
 --------------------------------------
@@ -451,9 +457,9 @@ This is equivalent to:
 
    pytest.main([
        "-p", "no:pytest-nbgrader",
-       "--noauto",
        "-W", "ignore::pytest.PytestAssertRewriteWarning",
        "--cases=tests/Addition/basic.yml",
+       "--noauto",
        "harness.py::TestClass",
    ])
 

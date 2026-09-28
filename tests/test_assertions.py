@@ -1063,3 +1063,48 @@ class TestHasImportRegressions:
         """A name the module does not define fails instead of raising AttributeError."""
         result, _ = assertions.has_import(make_case(), ((_Obj(),), {}, 0.0), foo=pathlib.Path("x.py"))
         assert result is pytest.ExitCode.TESTS_FAILED
+
+
+class TestReviewRegressions:
+    """Regressions found while reviewing the fixes above."""
+
+    @pytest.mark.parametrize(
+        ("expected", "actual"),
+        [
+            ({"mean": 2.0, "n": 4}, {"mean": np.array([2.0, 2.0]), "n": 4}),  # array where a scalar was expected
+            ([np.array([1, 1]), 3], [1, 3]),
+            ([np.full((2, 2), 5)], [np.full((2,), 5)]),
+            ({"a": np.arange(2), "b": (1, 2)}, {"a": np.arange(2), "b": [1, 2]}),  # tuple vs list, as with ==
+        ],
+    )
+    def test_containers_with_arrays_do_not_broadcast(self, expected, actual):
+        """Containers holding arrays are compared strictly, without broadcasting."""
+        case = make_case(expected=((expected,), {}))
+        assert assertions.equal_value(case, ((actual,), {}, 0.0))[0] is pytest.ExitCode.TESTS_FAILED
+
+    def test_containers_with_equal_arrays(self):
+        """Containers holding equal arrays still pass."""
+        value = {"mean": np.array([2.0, 2.0]), "n": 4, "parts": [np.zeros(2), (1, 2)]}
+        copy = {"mean": np.array([2.0, 2.0]), "n": 4, "parts": [np.zeros(2), (1, 2)]}
+        assert assertions.equal_value(make_case(expected=((value,), {})), ((copy,), {}, 0.0))[0] is pytest.ExitCode.OK
+
+    def test_expected_objects_as_list(self):
+        """Expected objects may be given as a list."""
+        case = make_case(expected=([_Obj(x=1), _Obj(x=3)], {}))
+        outputs = ((_Obj(x=1), _Obj(x=3)), {}, 0.0)
+        assert assertions.equal_attributes(case, outputs, "x")[0] is pytest.ExitCode.OK
+        assert assertions.close_attributes(case, outputs, "x")[0] is pytest.ExitCode.OK
+
+    def test_object_count_mismatch_message(self):
+        """A different number of objects is reported as such."""
+        case = make_case(expected=((_Obj(x=1),), {}))
+        result, message = assertions.equal_attributes(case, ((_Obj(x=1), _Obj(x=1)), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+        assert "Expected: 1 object(s)" in message
+        assert "Actual: 2 object(s)" in message
+
+    def test_value_assertions_opt_out_of_exceptions(self):
+        """Only the built-in value assertions are skipped for raised exceptions; raises is not."""
+        assert assertions.equal_value.accepts_exceptions is False
+        assert assertions.close_attributes.accepts_exceptions is False
+        assert getattr(assertions.raises, "accepts_exceptions", True) is True

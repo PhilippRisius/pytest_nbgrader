@@ -165,11 +165,18 @@ class TestMainRegressions:
         monkeypatch.setattr("pytest.main", mock_pytest_main)
         return captured
 
-    def test_auto_false_disables_generated_tests(self, captured_args):
+    def test_auto_false_disables_generated_tests(self, captured_args, tmp_path):
         """auto=False runs only the given tests: the plugin must not generate its own test file."""
-        main("tests/custom.py", auto=False)
+        (tmp_path / "tests" / "hw1").mkdir(parents=True)
+        (tmp_path / "tests" / "hw1" / "ex1.yml").write_text("dummy: true")
+        main("tests/custom.py", task="hw1", subtask="ex1", auto=False)
         assert "--noauto" in captured_args
         assert "harness.py::TestClass" not in captured_args
+
+    def test_no_noauto_without_cases(self, captured_args):
+        """--noauto (defined by the symlinked conftest) is only passed together with --cases."""
+        main("/elsewhere/test_other.py", auto=False)
+        assert "--noauto" not in captured_args
 
     def test_falsy_submission_is_accepted(self, captured_args, monkeypatch):
         """Only a missing submission is rejected, not a falsy one."""
@@ -234,13 +241,13 @@ class TestSymlinkRegressions:
             pass
         assert not (work / "mod_a.py").is_symlink()
 
-    def test_leftover_symlink_is_replaced_and_removed(self, fake_module, workdir):
-        """A symlink left behind by an interrupted run is not mistaken for a custom file."""
+    def test_valid_link_to_module_is_kept(self, fake_module, workdir):
+        """A valid link to the module (e.g. created by the user) is used and left in place."""
         link = workdir / "mymod.py"
         link.symlink_to(fake_module.__file__)
         with TemporarySymlink(fake_module):
             assert link.is_symlink()
-        assert not link.is_symlink()
+        assert link.is_symlink()
 
     def test_dangling_leftover_from_other_environment(self, fake_module, workdir, tmp_path):
         """A dangling symlink to the same module in another (removed) environment is replaced."""

@@ -176,8 +176,10 @@ raises
 
 When ``TestCase.raises=True``, the harness catches the exception raised by the submission and
 passes it as ``outputs``. This assertion verifies the exception is an instance of one of the
-given types; if the submission does not raise, it fails. Other assertions are not applied to
-the exception, so ``raises=True`` cases can share a subtask with ordinary cases.
+given types; if the submission does not raise, it fails. The other built-in assertions are not
+applied to the exception, so ``raises=True`` cases can share a subtask with ordinary cases.
+Custom assertions receive the exception as ``outputs`` unless they set
+``accepts_exceptions = False``.
 
 .. code-block:: python
 
@@ -244,8 +246,8 @@ equal_attributes
 
 Compares attribute values between expected and actual class instances.
 Each object in ``outputs[0]`` (one per instantiation) is compared with the corresponding
-object in ``case.expected[0]``; a different number of objects, or an attribute missing on the
-actual object, fails.
+object in ``case.expected[0]`` (a tuple or list); a different number of objects, or an
+attribute missing on the actual object, fails.
 
 .. code-block:: python
 

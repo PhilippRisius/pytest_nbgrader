@@ -4,6 +4,7 @@ Pytest configuration module.
 pytest internals:
   pytest_addoption -- add custom options to test a single subtask at a time
   pytest_generate_tests -- generate tests programmatically from `tests.pickle`
+  pytest_collection_modifyitems -- refuse test cases that would test nothing
 
 pytest fixtures:
   verbosity -- provide verbosity level for outputs
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 __all__ = [
     "pytest_addoption",
+    "pytest_collection_modifyitems",
     "pytest_generate_tests",
     "pytest_sessionfinish",
     "pytest_sessionstart",
@@ -26,6 +28,7 @@ __all__ = [
 
 import pathlib
 import warnings
+from collections.abc import Mapping
 
 import pytest
 
@@ -114,9 +117,28 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
         auto.unlink(missing_ok=True)
 
 
+def _items(parameters: object) -> list:
+    """
+    List the ``(key, value)`` items of a prerequisites or assertions dict (or list of pairs).
+
+    Parameters
+    ----------
+    parameters : object
+        A dict, a list of ``(key, value)`` pairs, or None.
+
+    Returns
+    -------
+    list
+        The ``(key, value)`` items.
+    """
+    if not parameters:
+        return []
+    return list(parameters.items()) if isinstance(parameters, Mapping) else list(parameters)
+
+
 def _parameter(key: object, value: object) -> object:
     """
-    Wrap a prerequisites or assertions dict item as a pytest parameter with a readable id.
+    Wrap a prerequisites or assertions item as a pytest parameter with a readable id.
 
     Parameters
     ----------
@@ -151,22 +173,45 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
         warnings.warn(UserWarning("pytest-nbgrader: No data for automatic tests found."), stacklevel=1)
         return
 
-    prerequisites = getattr(cases, "prerequisites", None) or {}
-    if {"cases", "assertions"} <= set(requested) and not (cases.cases and cases.assertions) and not prerequisites:
-        pytest.fail(
-            "pytest-nbgrader: the test cases define no cases or no assertions, so nothing would be tested. "
-            "Pass --noauto if only a custom harness should run.",
-            pytrace=False,
-        )
-
     for fixture in requested:
         if fixture == "cases":
             parameters = [pytest.param(case, id=str(index)) for index, case in enumerate(cases.cases)]
         else:
-            parameters = [_parameter(key, value) for key, value in (prerequisites if fixture == "prerequisites" else cases.assertions).items()]
-        if fixture == "prerequisites" and not parameters:
-            parameters = [pytest.param(None, id="none", marks=pytest.mark.skip(reason="no prerequisites"))]
+            parameters = [_parameter(key, value) for key, value in _items(getattr(cases, fixture, None))]
+        if not parameters:
+            # an explicit skip instead of an empty parameter set (which may be configured to fail)
+            parameters = [pytest.param(None, id="none", marks=pytest.mark.skip(reason=f"no {fixture}"))]
         metafunc.parametrize(fixture, parameters)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """
+    Refuse test cases that would make the built-in harness pass without testing anything.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        The pytest config object.
+    items : list of pytest.Item
+        The collected test items.
+
+    Raises
+    ------
+    pytest.UsageError
+        If the test cases define no cases or no assertions (and no prerequisites) and no other
+        collected test (e.g. a custom harness) uses them.
+    """
+    test_cases = getattr(config.option, "test_cases", None)
+    if not test_cases or _items(getattr(test_cases, "prerequisites", None)) or (test_cases.cases and _items(test_cases.assertions)):
+        return
+
+    harness_file = pathlib.Path(pytest_nbgrader.harness.__file__).resolve()
+    using_cases = [item for item in items if "cases" in getattr(item, "fixturenames", ())]
+    if using_cases and all(pathlib.Path(item.path).resolve() == harness_file for item in using_cases):
+        raise pytest.UsageError(
+            "pytest-nbgrader: the test cases define no cases or no assertions, so nothing would be tested. "
+            "Use --noauto (or runner.main(..., auto=False)) if only a custom harness should run."
+        )
 
 
 @pytest.fixture

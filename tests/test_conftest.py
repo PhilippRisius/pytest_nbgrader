@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from pytest_nbgrader import conftest
+from pytest_nbgrader import conftest, harness
 from pytest_nbgrader.assertions import equal_value
 from pytest_nbgrader.cases import TestCase, TestSubtask
 from pytest_nbgrader.loader import Submission
@@ -215,18 +215,22 @@ class TestGenerateTestsRegressions:
         assert param.values == (None,)
         assert param.marks[0].name == "skip"
 
-    @pytest.mark.parametrize(
-        "subtask",
-        [
-            TestSubtask(cases=[TestCase()], assertions={}),
-            TestSubtask(cases=[], assertions={equal_value: ((), {})}),
-        ],
-    )
-    def test_nothing_to_test_fails(self, subtask):
-        """A subtask without cases or assertions (and without prerequisites) cannot pass silently."""
+    def test_empty_parameters_are_skipped_explicitly(self):
+        """Empty cases or assertions give an explicitly skipped parameter, not an empty parameter set."""
+        subtask = TestSubtask(cases=[], assertions={}, prerequisites={has_signature: ((), {})})
         metafunc = _metafunc(subtask, ["assertions", "cases"])
-        with pytest.raises(pytest.fail.Exception, match="nothing would be tested"):
-            conftest.pytest_generate_tests(metafunc)
+        conftest.pytest_generate_tests(metafunc)
+        for fixture in ("assertions", "cases"):
+            (param,) = _params(metafunc, fixture)
+            assert param.values == (None,)
+            assert param.marks[0].name == "skip"
+
+    def test_list_of_pairs(self):
+        """Assertions given as a list of (function, (args, kwargs)) pairs are parametrized like a dict."""
+        subtask = TestSubtask(cases=[TestCase()], assertions=[(equal_value, (("a",), {})), (equal_value, (("b",), {}))])
+        metafunc = _metafunc(subtask, ["assertions"])
+        conftest.pytest_generate_tests(metafunc)
+        assert [p.values[0] for p in _params(metafunc, "assertions")] == [(equal_value, (("a",), {})), (equal_value, (("b",), {}))]
 
     def test_custom_harness_with_cases_only(self):
         """A custom harness that only uses cases may come without assertions."""
@@ -277,3 +281,45 @@ class TestSubmissionFixture:
         monkeypatch.setattr(Submission, "submission", None)
         with pytest.raises(pytest.fail.Exception, match="no submission found"):
             conftest.submission.__wrapped__()
+
+
+class TestCollectionModifyItems:
+    """Test cases that would test nothing are refused after collection."""
+
+    @staticmethod
+    def _item(path, fixturenames):
+        """Build a stand-in for a collected item."""
+        return types.SimpleNamespace(path=pathlib.Path(path), fixturenames=fixturenames)
+
+    @staticmethod
+    def _config(test_cases):
+        """Build a stand-in config holding the loaded test cases."""
+        return types.SimpleNamespace(option=types.SimpleNamespace(test_cases=test_cases))
+
+    @pytest.mark.parametrize(
+        "subtask",
+        [
+            TestSubtask(cases=[TestCase()], assertions={}),
+            TestSubtask(cases=[], assertions={equal_value: ((), {})}),
+        ],
+    )
+    def test_only_builtin_harness(self, subtask):
+        """Without cases or assertions, the built-in harness alone would pass vacuously."""
+        items = [self._item(harness.__file__, ["submission", "cases", "assertions"])]
+        with pytest.raises(pytest.UsageError, match="nothing would be tested"):
+            conftest.pytest_collection_modifyitems(self._config(subtask), items)
+
+    def test_custom_harness_uses_cases(self, tmp_path):
+        """A collected custom harness that uses the cases may come without assertions."""
+        subtask = TestSubtask(cases=[TestCase()], assertions={})
+        items = [self._item(harness.__file__, ["cases", "assertions"]), self._item(tmp_path / "test_custom.py", ["submission", "cases"])]
+        conftest.pytest_collection_modifyitems(self._config(subtask), items)
+
+    def test_prerequisites_only(self):
+        """A subtask with only prerequisites tests something."""
+        subtask = TestSubtask(cases=[], assertions={}, prerequisites={has_signature: ((), {})})
+        conftest.pytest_collection_modifyitems(self._config(subtask), [self._item(harness.__file__, ["cases", "assertions"])])
+
+    def test_no_test_cases(self):
+        """Nothing happens without --cases."""
+        conftest.pytest_collection_modifyitems(self._config(None), [])

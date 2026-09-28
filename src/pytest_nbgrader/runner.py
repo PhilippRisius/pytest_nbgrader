@@ -62,14 +62,14 @@ def main(
     if task is not None and subtask is None:
         raise ValueError("task requires subtask.")
 
-    # The harness is added explicitly below, so the plugin must not generate its own test file.
-    pytest_args = ["-p", "no:pytest-nbgrader", "--noauto", "-W", "ignore::pytest.PytestAssertRewriteWarning"]
+    pytest_args = ["-p", "no:pytest-nbgrader", "-W", "ignore::pytest.PytestAssertRewriteWarning"]
 
     if subtask is not None:
         cases = pathlib.Path(case_dir) / (task or "") / f"{subtask}.yml"
         if not cases.is_file():
             raise FileNotFoundError("Test cases could not be found.")
-        pytest_args.append(f"--{cases=!s}")
+        # The harness is added explicitly below, so the plugin must not generate its own test file.
+        pytest_args.extend([f"--{cases=!s}", "--noauto"])
 
     pytest_args.extend(args)
 
@@ -88,9 +88,13 @@ def main(
         return pytest.main(pytest_args, **kwargs)
 
 
-def _links_to(path: pathlib.Path, module: _types.ModuleType) -> bool:
+def _is_stale_link(path: pathlib.Path, module: _types.ModuleType) -> bool:
     """
-    Tell whether ``path`` is a symlink to the file of ``module``.
+    Tell whether ``path`` is a symlink to a copy of ``module``'s file that no longer applies.
+
+    Such links are left behind by runs that were interrupted in another environment, e.g. before
+    the package was reinstalled elsewhere. A valid link to the module's current file is not stale:
+    it is treated like any other custom file.
 
     Parameters
     ----------
@@ -102,14 +106,14 @@ def _links_to(path: pathlib.Path, module: _types.ModuleType) -> bool:
     Returns
     -------
     bool
-        True if ``path`` is a symlink resolving to the module's file, or a dangling symlink to a
-        file of the same name in a directory of the same name (e.g. left over from another environment).
+        True if ``path`` is a symlink to a file of the same name in a directory of the same name
+        as the module's file, but not to the module's file itself.
     """
     if not path.is_symlink():
         return False
     target = pathlib.Path(module.__file__)
-    if path.exists():
-        return path.resolve() == target.resolve()
+    if path.exists() and path.resolve() == target.resolve():
+        return False
     link = path.readlink()
     return (link.name, link.parent.name) == (target.name, target.parent.name)
 
@@ -151,14 +155,14 @@ class TemporarySymlink:
         """
         Create the symlink if no custom file exists.
 
-        A symlink to the module left behind by an interrupted run is replaced (and removed on exit).
+        A stale symlink to the module (e.g. from another environment) is replaced and removed on exit.
 
         Returns
         -------
         pathlib.Path
             The symlink path.
         """
-        if _links_to(self.path, self.module):
+        if _is_stale_link(self.path, self.module):
             self.path.unlink()
         self.custom = self.path.exists() or self.path.is_symlink()
         if not self.custom:

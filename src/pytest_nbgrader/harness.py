@@ -121,8 +121,8 @@ class TestClass:
         """
         case, outputs = test_execution
         function, args, kwargs = _unpack(assertions)
-        if isinstance(outputs, BaseException) and not getattr(function, "accepts_exceptions", False):
-            # the expected exception was raised; only exception assertions (``raises``) apply
+        if isinstance(outputs, BaseException) and not getattr(function, "accepts_exceptions", True):
+            # the expected exception was raised; value assertions do not apply to it
             return
 
         try:

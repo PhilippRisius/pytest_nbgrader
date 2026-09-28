@@ -12,15 +12,16 @@ Changes
 * ``equal_attributes`` and ``close_attributes`` compare every object in ``outputs[0]`` with the corresponding object in ``case.expected[0]`` (one per instantiation of a class), and fail if the numbers differ. Previously only the first instance was checked.
 * ``equal_contents`` casts only containers to the expected type; scalars are compared as they are. Missing or extra outputs fail.
 * ``almost_equal`` requires actual and expected values to have the same shape instead of broadcasting.
-* ``raises=True`` cases may be mixed with other cases: assertions other than ``raises`` are not applied to the raised exception.
-* ``execute()`` always returns a tuple of positional outputs: a function returning ``None`` with one expected output gives ``(None,)``, lists count as multiple outputs, other values (including strings) as one. Memoized functions, ``functools.partial`` and other callables can be submitted.
+* ``raises=True`` cases may be mixed with other cases: the built-in value assertions are not applied to the raised exception. Custom assertions still receive it, unless they set ``accepts_exceptions = False``.
+* ``execute()`` always returns a tuple of positional outputs: a function returning ``None`` with one expected output gives ``(None,)``; with several expected outputs, tuples, lists and numpy arrays hold one output per element, other values (including strings) are one output. Memoized functions, ``functools.partial`` and other callables can be submitted.
 * Code strings run with ``__name__ == "__main__"``; dunder names are not part of the output scope.
 * The harness accepts prerequisites and assertions keyed by a label, ``{"label": (function, (args, kwargs))}``, as documented. Test ids name the assertion and case (``test_assertion[equal_value-0]``).
 * ``runner.main(auto=False)`` runs only the tests passed in ``*args``.
 * ``writes`` and ``writes_file`` accept ``argv``; ``sys.exit(0)`` counts as a normal run.
-* ``dump_subtask`` keeps dict order, merges into the existing subtask with ``append=True``, writes portable ``pathlib.Path`` tags, accepts ``str`` paths, and refuses functions that students cannot import (lambdas, ``__main__``). Requires PyYAML >= 5.1.
+* ``dump_subtask`` keeps dict order, merges into the existing subtask with ``append=True``, writes portable ``pathlib.Path`` tags, accepts ``str`` paths, and refuses functions that students cannot import by module and name (lambdas, methods, ``__main__``). Requires PyYAML >= 5.1.
 * ``time_bounds`` bounds are inclusive; ``0`` is a bound, not "unbounded".
 * Failure messages name the exit code (``TESTS_FAILED``); ``-v`` shows the full traceback.
+* ``has_signature`` accepts a submission whose raw or evaluated (postponed) annotations match the reference.
 * Configuration errors (missing or invalid ``--cases`` file, subtask without cases or assertions, no submission) are reported as such.
 
 Fixes

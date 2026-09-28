@@ -3,6 +3,7 @@
 import __future__
 import functools
 import importlib.machinery
+import sys
 import types
 
 import pytest
@@ -141,9 +142,17 @@ class TestSubmitRegressions:
             Submission.submit(path)
         assert Submission.submission is None
 
-    def test_path_read_as_utf8(self, tmp_path, capsys):
-        """Module source is read as UTF-8 (the encoding of Python source files)."""
-        path = tmp_path / "sol.py"
-        path.write_text("# Grüße\nx = 1\n", encoding="utf-8")
-        Submission.submit(path)
-        assert "Grüße" in capsys.readouterr().out
+    def test_path_read_as_utf8(self, pytester):
+        """Module source is read as UTF-8 (the encoding of Python source files), whatever the locale."""
+        (pytester.path / "sol.py").write_text("# Grüße\nx = 1\n", encoding="utf-8")
+        script = pytester.makepyfile(
+            check=(
+                "import pathlib, warnings\n"
+                "from pytest_nbgrader.loader import Submission\n"
+                "warnings.simplefilter('error', EncodingWarning)\n"
+                "Submission.submit(pathlib.Path('sol.py'))\n"
+            )
+        )
+        # -X warn_default_encoding warns whenever a file is opened without an explicit encoding
+        result = pytester.run(sys.executable, "-X", "warn_default_encoding", script)
+        assert result.ret == 0, result.stderr.str()

@@ -68,7 +68,8 @@ def _snapshot(root: str = ".") -> dict[pathlib.Path, tuple[int, int]]:
     """
     Record size and modification time of all files below ``root``.
 
-    Symlinks are not followed and ``__pycache__`` directories (written by the import system) are skipped.
+    Symlinks are followed (each directory is visited once, so link loops are harmless);
+    ``__pycache__`` directories, written by the import system, are skipped.
 
     Parameters
     ----------
@@ -81,12 +82,19 @@ def _snapshot(root: str = ".") -> dict[pathlib.Path, tuple[int, int]]:
         Mapping of relative file paths to ``(size, mtime_ns)``.
     """
     snapshot = {}
-    for directory, subdirectories, filenames in os.walk(root):
+    visited = set()
+    for directory, subdirectories, filenames in os.walk(root, followlinks=True):
+        directory_stat = pathlib.Path(directory).stat()
+        if (directory_stat.st_dev, directory_stat.st_ino) in visited:
+            subdirectories.clear()
+            continue
+        visited.add((directory_stat.st_dev, directory_stat.st_ino))
         subdirectories[:] = [subdirectory for subdirectory in subdirectories if subdirectory != "__pycache__"]
         for filename in filenames:
             path = pathlib.Path(directory, filename)
             with contextlib.suppress(OSError):  # e.g. removed while walking
-                stat = path.lstat()
+                # a dangling symlink has no target to stat
+                stat = path.stat() if path.exists() else path.lstat()
                 snapshot[path] = (stat.st_size, stat.st_mtime_ns)
     return snapshot
 
@@ -257,6 +265,102 @@ def writes(
     return result or pytest.ExitCode.OK
 
 
+def _invalid_signature(expected: object, actual: object) -> str:
+    """
+    Format message for warnings.
+
+    Parameters
+    ----------
+    expected : object
+        Expected signature or parameter.
+    actual : object
+        Actual signature or parameter.
+
+    Returns
+    -------
+    str
+        Formatted warning message.
+    """
+    return f"Function signature is not valid.\n{expected = },\n  {actual = }."
+
+
+def _pretty_par(par: inspect.Parameter) -> str:
+    """
+    Pretty formatting of function parameters.
+
+    Parameters
+    ----------
+    par : inspect.Parameter
+        The parameter to format.
+
+    Returns
+    -------
+    str
+        Human-readable parameter description.
+    """
+    string = f"{par.kind.name} parameter <{par.name}"
+    if par.annotation is not inspect.Parameter.empty:
+        string += f": {par.annotation}"
+    if par.default is not inspect.Parameter.empty:
+        string += f" = {par.default}"
+    string += ">"
+    return string
+
+
+def _signature_mismatches(
+    fun_sig: inspect.Signature,
+    ref_sig: inspect.Signature,
+    strict_comparisons: tuple[str, ...],
+    compare_names: Callable[[list[str], list[str]], bool],
+    comparisons: dict[str, Callable[[Any, Any], bool]],
+) -> list[str]:
+    """
+    Compare a signature of the tested function with the reference signature.
+
+    Parameters
+    ----------
+    fun_sig : inspect.Signature
+        Signature of the tested function.
+    ref_sig : inspect.Signature
+        Reference signature.
+    strict_comparisons : tuple of str
+        Parameter attributes to compare using strict equality.
+    compare_names : callable
+        Function to compare parameter name lists.
+    comparisons : dict
+        Mapping of parameter attributes to comparison functions.
+
+    Returns
+    -------
+    list of str
+        Descriptions of all differences.
+    """
+    problems = []
+    comps = dict(comparisons)
+
+    if not compare_names(list(fun_sig.parameters), list(ref_sig.parameters)):
+        problems.append(_invalid_signature(list(ref_sig.parameters), list(fun_sig.parameters)))
+
+    for name, fun_par in fun_sig.parameters.items():
+        ref_par = ref_sig.parameters.get(name)
+        if ref_par is not None:
+            for attr in strict_comparisons:
+                comps[attr] = type(getattr(fun_par, attr)).__eq__
+            for attr, comp in comps.items():
+                fun_value, ref_value = getattr(fun_par, attr), getattr(ref_par, attr)
+                if comp(fun_value, ref_value) is not True:
+                    problems.append(_invalid_signature(_pretty_par(ref_par), _pretty_par(fun_par)))
+
+    ref_return, fun_return = ref_sig.return_annotation, fun_sig.return_annotation
+    if "annotation" in strict_comparisons:
+        comps["annotation"] = type(fun_return).__eq__
+    # same argument order as for parameters: (submission, reference)
+    if "annotation" in comps and comps["annotation"](fun_return, ref_return) is not True:
+        problems.append(f"Return annotation of {_invalid_signature(ref_return, fun_return)}")
+
+    return problems
+
+
 def has_signature(
     function: Callable[..., Any],
     ref_sig: inspect.Signature,
@@ -286,75 +390,17 @@ def has_signature(
         ``pytest.ExitCode.OK`` if signature matches,
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
+    raw_sig = inspect.signature(function)
+    problems = _signature_mismatches(raw_sig, ref_sig, strict_comparisons, compare_names, comparisons)
+    if problems:
+        # Postponed (string) annotations: the reference may hold the evaluated types instead.
+        try:
+            evaluated_sig = inspect.signature(function, eval_str=True)
+        except Exception:  # noqa: BLE001 - annotations that cannot be evaluated stay strings
+            evaluated_sig = raw_sig
+        if evaluated_sig != raw_sig and not _signature_mismatches(evaluated_sig, ref_sig, strict_comparisons, compare_names, comparisons):
+            problems = []
 
-    def invalid_signature(expected: object, actual: object) -> str:
-        """
-        Format message for warnings.
-
-        Parameters
-        ----------
-        expected : object
-            Expected signature or parameter.
-        actual : object
-            Actual signature or parameter.
-
-        Returns
-        -------
-        str
-            Formatted warning message.
-        """
-        return f"Function signature is not valid.\n{expected = },\n  {actual = }."
-
-    def pretty_par(par: inspect.Parameter) -> str:
-        """
-        Pretty formatting of function parameters.
-
-        Parameters
-        ----------
-        par : inspect.Parameter
-            The parameter to format.
-
-        Returns
-        -------
-        str
-            Human-readable parameter description.
-        """
-        string = f"{par.kind.name} parameter <{par.name}"
-        if par.annotation is not inspect.Parameter.empty:
-            string += f": {par.annotation}"
-        if par.default is not inspect.Parameter.empty:
-            string += f" = {par.default}"
-        string += ">"
-        return string
-
-    try:
-        fun_sig = inspect.signature(function, eval_str=True)
-    except Exception:  # noqa: BLE001 - annotations that cannot be evaluated are compared as strings
-        fun_sig = inspect.signature(function)
-    result = None
-
-    if not compare_names(list(fun_sig.parameters), list(ref_sig.parameters)):
-        logger.warning(invalid_signature(list(ref_sig.parameters), list(fun_sig.parameters)))
-        result = pytest.ExitCode.TESTS_FAILED
-
-    for name, fun_par in fun_sig.parameters.items():
-        ref_par = ref_sig.parameters.get(name)
-        if ref_par is not None:
-            for attr in strict_comparisons:
-                comparisons[attr] = type(getattr(fun_par, attr)).__eq__
-            for attr, comp in comparisons.items():
-                fun_value, ref_value = getattr(fun_par, attr), getattr(ref_par, attr)
-                if comp(fun_value, ref_value) is not True:
-                    logger.warning(invalid_signature(pretty_par(ref_par), pretty_par(fun_par)))
-                    result = pytest.ExitCode.TESTS_FAILED
-
-    ref_return, fun_return = ref_sig.return_annotation, fun_sig.return_annotation
-    if "annotation" in strict_comparisons:
-        comparisons["annotation"] = type(fun_return).__eq__
-    if "annotation" in comparisons:
-        # same argument order as for parameters: (submission, reference)
-        if comparisons["annotation"](fun_return, ref_return) is not True:
-            logger.warning("Return annotation of %s", invalid_signature(ref_return, fun_return))
-            result = pytest.ExitCode.TESTS_FAILED
-
-    return result or pytest.ExitCode.OK
+    for problem in problems:
+        logger.warning(problem)
+    return pytest.ExitCode.TESTS_FAILED if problems else pytest.ExitCode.OK

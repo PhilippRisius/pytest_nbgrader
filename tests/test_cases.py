@@ -1,10 +1,12 @@
 """Tests for cases.py — Timer, format_result, execute dispatches."""
 
+import dataclasses
 import functools
 import importlib.util
 import logging
 import sys
 
+import numpy as np
 import pytest
 
 from pytest_nbgrader.cases import TestCase, TestSubtask, Timer, execute, format_result, raised_by_submission
@@ -475,3 +477,42 @@ class TestNotCollected:
         """TestCase and TestSubtask opt out of pytest collection."""
         assert TestCase.__test__ is False
         assert TestSubtask.__test__ is False
+
+
+class TestReviewRegressions:
+    """Regressions found while reviewing the fixes above."""
+
+    def test_array_return_is_several_outputs(self):
+        """A 1-D array returned for several expected outputs holds one output per element."""
+        case = TestCase(inputs=((), {}), expected=((2.0, 1.0), {}))
+        assert execute(lambda: np.array([2.0, 1.0]), case)[0] == (2.0, 1.0)
+
+    def test_array_return_is_one_output(self):
+        """An array returned for one expected output stays one output."""
+        case = TestCase(inputs=((), {}), expected=((None,), {}))
+        (output,), _, _ = execute(lambda: np.array([2.0, 1.0]), case)
+        assert isinstance(output, np.ndarray)
+
+    def test_frozen_exception_is_forwarded(self):
+        """Exceptions that forbid attribute assignment (frozen dataclasses) are tagged and propagate unchanged."""
+
+        @dataclasses.dataclass(frozen=True)
+        class InvalidInputError(Exception):
+            value: int
+
+        def check(x):
+            raise InvalidInputError(x)
+
+        with pytest.raises(InvalidInputError) as excinfo:
+            execute(check, TestCase(inputs=((-1,), {})))
+        assert raised_by_submission(excinfo.value)
+
+    def test_frozen_exception_from_module(self, tmp_path):
+        """A frozen exception raised while a module runs propagates unchanged."""
+        path = tmp_path / "frozen_mod.py"
+        path.write_text("import dataclasses\n\n@dataclasses.dataclass(frozen=True)\nclass E(Exception):\n    x: int\n\nraise E(1)\n")
+        spec = importlib.util.spec_from_file_location("frozen_mod", path)
+        with pytest.raises(Exception) as excinfo:  # the exception class is defined by the module
+            execute(spec, TestCase())
+        assert type(excinfo.value).__name__ == "E"
+        assert raised_by_submission(excinfo.value)

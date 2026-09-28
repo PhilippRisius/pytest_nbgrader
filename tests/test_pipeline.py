@@ -1,15 +1,25 @@
 """End-to-end tests: real pytest sessions through the plugin and ``runner.main``."""
 
+import importlib.util
 import sys
 import textwrap
 
+import numpy as np
 import pytest
 
-from pytest_nbgrader.assertions import equal_attributes, equal_contents, equal_value, raises
+from pytest_nbgrader.assertions import _log, almost_equal, equal_attributes, equal_contents, equal_value, raises
 from pytest_nbgrader.cases import TestCase, TestSubtask
 from pytest_nbgrader.dumper import dump_subtask
 from pytest_nbgrader.loader import Submission
-from pytest_nbgrader.prerequisites import has_signature
+from pytest_nbgrader.prerequisites import has_signature, writes
+
+
+@_log
+def raises_with_message(case, outputs, exception_type, fragment):
+    """Check type and message of the raised exception (a custom assertion)."""
+    if isinstance(outputs, exception_type) and fragment in str(outputs):
+        return pytest.ExitCode.OK
+    return pytest.ExitCode.TESTS_FAILED, (exception_type, fragment), outputs
 
 
 class Point:
@@ -35,6 +45,12 @@ def _restore_submission():
     saved = Submission.submission
     yield
     Submission.submission = saved
+
+
+@pytest.fixture(autouse=True)
+def _isolated_ini(pytester):
+    """Keep the inner sessions from picking up this project's configuration (e.g. with --basetemp in the checkout)."""
+    pytester.makeini("[pytest]\n")
 
 
 def _run(pytester, subtask, submission, *args):
@@ -68,6 +84,21 @@ class TestCasesOption:
         """The TestCase/TestSubtask dataclasses are not mistaken for test classes."""
         result = _run(pytester, ADDITION, lambda a, b: a + b, "-W", "error::pytest.PytestCollectionWarning")
         assert result.ret == pytest.ExitCode.OK
+
+    def test_list_of_pairs(self, pytester):
+        """Assertions as a list of pairs can use the same assertion twice."""
+        subtask = TestSubtask(
+            cases=[TestCase(inputs=((), {"a": 1, "b": 2}), expected=((), {"a": 2, "b": 1}))],
+            assertions=[(equal_value, (("a",), {})), (equal_value, (("b",), {}))],
+        )
+        result = _run(pytester, subtask, compile("a, b = b, a", "s", "exec"))
+        result.assert_outcomes(passed=2, skipped=1)
+
+    def test_array_return_for_several_outputs(self, pytester):
+        """A function returning a numpy array matches several expected outputs element-wise."""
+        subtask = TestSubtask(cases=[TestCase(inputs=((1, -3, 2), {}), expected=((2.0, 1.0), {}))], assertions={almost_equal: ((), {})})
+        result = _run(pytester, subtask, lambda a, b, c: np.roots([a, b, c]))
+        result.assert_outcomes(passed=1, skipped=1)
 
     def test_no_empty_parameter_set(self, pytester):
         """Subtasks without prerequisites work with empty_parameter_set_mark = fail_at_collect."""
@@ -131,6 +162,21 @@ class TestRaisesCases:
         result = _run(pytester, self.SUBTASK, lambda a, b: a / b if b else float("inf"))
         result.assert_outcomes(passed=2, failed=2, skipped=1)
 
+    def test_custom_exception_assertion(self, pytester):
+        """Custom assertions still receive the exception of raises=True cases."""
+        subtask = TestSubtask(
+            cases=[TestCase(inputs=((1, 0), {}), expected=((), {}), raises=True)],
+            assertions={raises_with_message: ((ValueError, "zero"), {})},
+        )
+
+        def divide(a, b):
+            if b == 0:
+                raise ValueError("b must not be zero")
+            return a / b
+
+        _run(pytester, subtask, divide).assert_outcomes(passed=1, skipped=1)
+        _run(pytester, subtask, lambda a, b: a / b).assert_outcomes(failed=1, skipped=1)
+
     def test_plugin_errors_are_not_the_expected_exception(self, pytester):
         """A student who returns a number never satisfies raises(TypeError)."""
         subtask = TestSubtask(
@@ -180,8 +226,33 @@ class TestUsageErrors:
     def test_nothing_to_test(self, pytester):
         """A subtask without assertions does not pass silently."""
         result = _run(pytester, TestSubtask(cases=ADDITION.cases, assertions={}), lambda a, b: "wrong")
-        assert result.ret != pytest.ExitCode.OK
-        result.stdout.fnmatch_lines(["*nothing would be tested*"])
+        assert result.ret == pytest.ExitCode.USAGE_ERROR
+        result.stderr.fnmatch_lines(["*nothing would be tested*"])
+
+    def test_custom_harness_without_assertions(self, pytester):
+        """Data for a custom harness needs no assertions, even if the built-in harness is collected too."""
+        pytester.makepyfile(
+            test_custom=(
+                "def test_custom(submission, cases):\n"
+                "    (args, kwargs), ((expected,), _) = cases.inputs, cases.expected\n"
+                "    assert submission(*args, **kwargs) == expected\n"
+            )
+        )
+        # skipped: the built-in harness (no prerequisites, no assertions for either case)
+        result = _run(pytester, TestSubtask(cases=ADDITION.cases, assertions={}), lambda a, b: a + b)
+        result.assert_outcomes(passed=2, skipped=3)
+        result = _run(pytester, TestSubtask(cases=ADDITION.cases, assertions={}), lambda a, b: a - b)
+        result.assert_outcomes(passed=1, failed=1, skipped=3)
+
+    def test_prerequisites_only(self, pytester, tmp_path):
+        """Prerequisites-only subtasks work with empty_parameter_set_mark = fail_at_collect."""
+        pytester.makeini("[pytest]\nempty_parameter_set_mark = fail_at_collect\n")
+        script = pytester.path / "hello.py"
+        script.write_text("print('Hello, World!')\n")
+        spec = importlib.util.spec_from_file_location("hello", script)
+        subtask = TestSubtask(cases=[], assertions={}, prerequisites={"output": (writes, ((), {"out": "Hello, World!\n"}))})
+        result = _run(pytester, subtask, spec)
+        result.assert_outcomes(passed=1, skipped=1)
 
     def test_no_submission(self, pytester):
         """Running without a submission says so."""
@@ -239,6 +310,12 @@ def _notebook(pytester, body):
 class TestRunnerMain:
     """runner.main end to end."""
 
+    @pytest.fixture(autouse=True)
+    def _no_subprocess_coverage(self, monkeypatch):
+        """Keep pytest-cov < 7 from measuring the notebook scripts."""
+        for variable in ("COV_CORE_SOURCE", "COV_CORE_CONFIG", "COV_CORE_DATAFILE"):
+            monkeypatch.delenv(variable, raising=False)
+
     def test_auto_and_cleanup(self, pytester):
         """auto=True grades the subtask and leaves no files behind."""
         lines = _notebook(
@@ -278,14 +355,13 @@ class TestRunnerMain:
         assert "RC2 0" in lines
 
     def test_leftover_symlinks_are_cleaned(self, pytester):
-        """Symlinks left behind by an interrupted run are replaced and removed."""
+        """Dangling symlinks left behind in another environment are replaced and removed."""
         lines = _notebook(
             pytester,
             """
-            from pytest_nbgrader import conftest, harness
             os.chdir("first")
-            pathlib.Path("conftest.py").symlink_to(conftest.__file__)
-            pathlib.Path("harness.py").symlink_to(harness.__file__)
+            pathlib.Path("conftest.py").symlink_to("/old/env/site-packages/pytest_nbgrader/conftest.py")
+            pathlib.Path("harness.py").symlink_to("/old/env/site-packages/pytest_nbgrader/harness.py")
             print("RC", int(runner.main("-q", task="Addition", subtask="basic")))
             print("FILES", sorted(p.name for p in pathlib.Path().glob("*.py")))
             """,

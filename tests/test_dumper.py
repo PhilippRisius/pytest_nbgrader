@@ -1,5 +1,6 @@
 """Tests for dumper.py — dump_exercise, dump_task, dump_subtask append mode."""
 
+import functools
 import pathlib
 
 import pytest
@@ -167,3 +168,35 @@ class TestDumpRegressions:
         dump_subtask(_make_subtask(assertions={equal_value: ((), {})}), to=tmp_path / "ok.yml")
         with (tmp_path / "ok.yml").open("rb") as f:
             assert equal_value in yaml.unsafe_load(f).assertions
+
+
+class _Checks:
+    """Holder for a static method that cannot be imported by module and name."""
+
+    @staticmethod
+    def positive(case, outputs):
+        """Return nothing."""
+
+
+class TestDumpReviewRegressions:
+    """Regressions found while reviewing the fixes above."""
+
+    def test_method_is_refused(self, tmp_path):
+        """A static method would be written as <module>.<name>, which does not resolve."""
+        with pytest.raises(yaml.representer.RepresenterError, match="top level of an importable module"):
+            dump_subtask(_make_subtask(assertions={_Checks.positive: ((), {})}), to=tmp_path / "method.yml")
+
+    def test_inline_wrapper_is_refused(self, tmp_path):
+        """A wrapper created inline would load as the wrapped function, a different object."""
+        wrapper = functools.wraps(equal_value)(lambda *a, **kw: None)
+        with pytest.raises(yaml.representer.RepresenterError):
+            dump_subtask(_make_subtask(assertions={wrapper: ((), {})}), to=tmp_path / "wrapper.yml")
+
+    def test_append_list_of_pairs(self, tmp_path):
+        """Appending merges assertions given as lists of pairs."""
+        yaml_file = tmp_path / "pairs.yml"
+        dump_subtask(_make_subtask(assertions=[(equal_value, (("a",), {}))]), to=yaml_file)
+        dump_subtask(_make_subtask(assertions={equal_value: (("b",), {})}), to=yaml_file, append=True)
+        with yaml_file.open("rb") as f:
+            loaded = yaml.unsafe_load(f)
+        assert loaded.assertions == [(equal_value, (("a",), {})), (equal_value, (("b",), {}))]

@@ -22,11 +22,11 @@ import importlib.util
 import logging
 import sys
 import types
-from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass, field
 from time import perf_counter
 
+import numpy as np
 import pytest
 
 
@@ -35,22 +35,35 @@ logger = logging.getLogger(__name__)
 _RAISED_BY_SUBMISSION = "_pytest_nbgrader_raised_by_submission"
 
 
-@contextlib.contextmanager
-def _running_submission() -> Iterator[None]:
-    """
-    Mark exceptions raised inside the block as raised by the student submission.
+class _RunningSubmission:
+    """Context manager marking exceptions raised inside the block as raised by the student submission."""
 
-    Yields
-    ------
-    None
-        Control to the block running student code.
-    """
-    try:
-        yield
-    except (Exception, SystemExit) as exc:
-        with contextlib.suppress(AttributeError):
-            setattr(exc, _RAISED_BY_SUBMISSION, True)
-        raise
+    def __enter__(self) -> None:
+        """Enter the block running student code."""
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: types.TracebackType | None) -> bool:
+        """
+        Tag the exception (if any) and let it propagate.
+
+        Parameters
+        ----------
+        exc_type : type or None
+            Exception type, if any.
+        exc_value : BaseException or None
+            Exception value, if any.
+        traceback : types.TracebackType or None
+            Traceback, if any.
+
+        Returns
+        -------
+        bool
+            False, so that the exception propagates.
+        """
+        if isinstance(exc_value, (Exception, SystemExit)):
+            # object.__setattr__ also works for exceptions that forbid attribute assignment (e.g. frozen dataclasses)
+            with contextlib.suppress(AttributeError, TypeError):
+                object.__setattr__(exc_value, _RAISED_BY_SUBMISSION, True)
+        return False
 
 
 def raised_by_submission(exception: BaseException) -> bool:
@@ -70,8 +83,61 @@ def raised_by_submission(exception: BaseException) -> bool:
     return getattr(exception, _RAISED_BY_SUBMISSION, False)
 
 
-@contextlib.contextmanager
-def registered_module(module: types.ModuleType) -> Iterator[types.ModuleType]:
+class _RegisteredModule:
+    """
+    Context manager registering a module in ``sys.modules`` while its code runs.
+
+    Parameters
+    ----------
+    module : types.ModuleType
+        The module about to be executed.
+    """
+
+    def __init__(self, module: types.ModuleType) -> None:
+        """
+        Store the module to register.
+
+        Parameters
+        ----------
+        module : types.ModuleType
+            The module about to be executed.
+        """
+        self.module = module
+        self.previous: types.ModuleType | None = None
+
+    def __enter__(self) -> types.ModuleType:
+        """
+        Register the module.
+
+        Returns
+        -------
+        types.ModuleType
+            The registered module.
+        """
+        self.previous = sys.modules.get(self.module.__name__)
+        sys.modules[self.module.__name__] = self.module
+        return self.module
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: types.TracebackType | None) -> None:
+        """
+        Restore the previous ``sys.modules`` entry.
+
+        Parameters
+        ----------
+        exc_type : type or None
+            Exception type, if any.
+        exc_value : BaseException or None
+            Exception value, if any.
+        traceback : types.TracebackType or None
+            Traceback, if any.
+        """
+        if self.previous is None:
+            sys.modules.pop(self.module.__name__, None)
+        else:
+            sys.modules[self.module.__name__] = self.previous
+
+
+def registered_module(module: types.ModuleType) -> _RegisteredModule:
     """
     Register a module in ``sys.modules`` while its code runs, as ``import`` would.
 
@@ -80,21 +146,12 @@ def registered_module(module: types.ModuleType) -> Iterator[types.ModuleType]:
     module : types.ModuleType
         The module about to be executed.
 
-    Yields
-    ------
-    types.ModuleType
-        The registered module; the previous ``sys.modules`` entry is restored afterwards.
+    Returns
+    -------
+    _RegisteredModule
+        Context manager that restores the previous ``sys.modules`` entry on exit.
     """
-    name = module.__name__
-    previous = sys.modules.get(name)
-    sys.modules[name] = module
-    try:
-        yield module
-    finally:
-        if previous is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = previous
+    return _RegisteredModule(module)
 
 
 class Timer:
@@ -266,6 +323,9 @@ def _as_outputs(return_value: object, expected_count: int) -> tuple:
     """
     Normalise a function's return value to a tuple of positional outputs.
 
+    With several expected outputs, tuples, lists and arrays hold one output per element;
+    any other value (e.g. a string) is a single output.
+
     Parameters
     ----------
     return_value : object
@@ -282,7 +342,7 @@ def _as_outputs(return_value: object, expected_count: int) -> tuple:
         return (return_value,)
     if return_value is None:
         return ()
-    if isinstance(return_value, (tuple, list)):
+    if isinstance(return_value, (tuple, list)) or (isinstance(return_value, np.ndarray) and return_value.ndim > 0):
         return tuple(return_value)
     return (return_value,)
 
@@ -307,7 +367,7 @@ def _execute_function(submission: collections.abc.Callable, case: TestCase) -> t
     """
     input_args, input_kwargs = deepcopy(case.inputs)
     input_args, input_kwargs = tuple(input_args), dict(input_kwargs)
-    with Timer() as t, _running_submission():
+    with Timer() as t, _RunningSubmission():
         return_value = submission(*input_args, **input_kwargs)
 
     number_of_expected_args = len(case.expected[0])
@@ -341,7 +401,7 @@ def _(submission: types.CodeType, case: TestCase) -> tuple[tuple, dict, float]:
     """
     positional, scope = deepcopy(case.inputs)
     scope = {"__name__": "__main__", **scope}
-    with Timer() as t, _running_submission():
+    with Timer() as t, _RunningSubmission():
         exec(submission, scope)
 
     named = {key: value for key, value in scope.items() if not (key.startswith("__") and key.endswith("__"))}
@@ -367,7 +427,7 @@ def _(submission: importlib.machinery.ModuleSpec, case: TestCase) -> tuple[tuple
     """
     with Timer() as t:
         return_object = importlib.util.module_from_spec(submission)
-        with registered_module(return_object), _running_submission():
+        with registered_module(return_object), _RunningSubmission():
             submission.loader.exec_module(return_object)
     return (return_object,), {}, t.elapsed
 
@@ -393,6 +453,6 @@ def _(submission: type, case: TestCase) -> tuple[tuple, dict, float]:
     return_objects = []
     with Timer() as t:
         for args, kwargs in instantiations:
-            with _running_submission():
+            with _RunningSubmission():
                 return_objects.append(submission(*args, **kwargs))
     return tuple(return_objects), {}, t.elapsed
