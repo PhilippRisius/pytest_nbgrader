@@ -122,7 +122,10 @@ def _links_inside(path: pathlib.Path, root: pathlib.Path) -> bool:
     bool
         True for a symlink whose target lies inside ``root``.
     """
-    return path.is_symlink() and path.resolve().is_relative_to(root)
+    try:
+        return path.is_symlink() and path.resolve().is_relative_to(root)
+    except OSError:  # e.g. inside a directory that can be listed but not entered; os.walk skips it
+        return False
 
 
 def writes_file(

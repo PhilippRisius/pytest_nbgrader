@@ -83,7 +83,8 @@ def _same_function(resolved: object, function: types.FunctionType) -> bool:
     return (
         isinstance(resolved, types.FunctionType)
         and (resolved.__module__, resolved.__qualname__) == (function.__module__, function.__qualname__)
-        and (resolved.__code__.co_filename, resolved.__code__.co_name) == (function.__code__.co_filename, function.__code__.co_name)
+        and (resolved.__code__.co_filename, resolved.__code__.co_name, resolved.__code__.co_firstlineno)
+        == (function.__code__.co_filename, function.__code__.co_name, function.__code__.co_firstlineno)
     )
 
 

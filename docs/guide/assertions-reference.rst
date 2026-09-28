@@ -177,9 +177,10 @@ raises
 
 When ``TestCase.raises=True``, the harness catches the exception raised by the submission and
 passes it as ``outputs``. This assertion verifies the exception is an instance of one of the
-given types; if the submission does not raise, it fails. The other built-in assertions are not
-applied to the exception, so ``raises=True`` cases can share a subtask with ordinary cases.
-Custom assertions receive the exception as ``outputs`` unless they set
+given types; if the submission does not raise, it fails. The built-in assertions that compare
+outputs are not applied to the exception, so ``raises=True`` cases can share a subtask with
+ordinary cases. ``file_contents``, which checks files on disk, still runs for ``raises=True``
+cases, and so do custom assertions, which receive the exception as ``outputs`` unless they set
 ``accepts_exceptions = False``.
 
 .. code-block:: python

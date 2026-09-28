@@ -229,3 +229,18 @@ class TestDumpRound3Regressions:
         dump_subtask(_make_subtask(assertions={positive: ((), {})}), to=tmp_path / "reloaded.yml")
         with (tmp_path / "reloaded.yml").open("rb") as f:
             assert yaml.unsafe_load(f).assertions == {course_checks.positive: ((), {})}
+
+
+class TestDumpRound4Regressions:
+    """Regressions found in the fourth review round."""
+
+    def test_redefined_function_is_refused(self, tmp_path, monkeypatch):
+        """A function shadowed by a later definition of the same name is refused (it would load as the other one)."""
+        (tmp_path / "shadowing_checks.py").write_text(
+            "def check(case, outputs):\n    return 'strict'\n\nstrict_check = check\n\ndef check(case, outputs):\n    return 'loose'\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        module = importlib.import_module("shadowing_checks")
+        monkeypatch.setitem(sys.modules, "shadowing_checks", module)
+        with pytest.raises(yaml.representer.RepresenterError):
+            dump_subtask(_make_subtask(assertions={module.strict_check: ((), {})}), to=tmp_path / "shadowed.yml")

@@ -216,7 +216,8 @@ Verify which files a module creates, deletes, or modifies during import:
    prerequisites={"files": (writes_file, ((), {"created": {Path("output.txt")}}))}
 
 Paths are relative to the directory pytest runs in; ``created``, ``deleted`` and ``modified``
-must match exactly. Files in ``__pycache__`` directories are ignored.
+must match exactly. Files in ``__pycache__`` directories are ignored. A file written through a
+symlink to a directory inside the working directory is reported under its real path.
 
 
 Packaging with TestSubtask

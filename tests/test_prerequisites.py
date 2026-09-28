@@ -661,3 +661,21 @@ class TestRound3Regressions:
             raise RuntimeError("broken comparator")
 
         assert has_signature(f, inspect.signature(f), annotation=broken) == pytest.ExitCode.TESTS_FAILED
+
+
+class TestRound4Regressions:
+    """Regressions found in the fourth review round."""
+
+    def test_directory_that_cannot_be_entered(self, tmp_path, monkeypatch):
+        """A directory that can be listed but not entered is skipped instead of crashing."""
+        workdir = tmp_path / "work"
+        (workdir / "archive" / "2025").mkdir(parents=True)
+        (workdir / "archive").chmod(0o644)
+        monkeypatch.chdir(workdir)
+        try:
+            if os.access(workdir / "archive" / "2025", os.F_OK):
+                pytest.skip("permissions are not enforced (e.g. running as root)")
+            spec = _make_spec(tmp_path, "writer_next_to_locked", "import pathlib; pathlib.Path('out.txt').write_text('x')")
+            assert writes_file(spec, created={pathlib.Path("out.txt")}) == pytest.ExitCode.OK
+        finally:
+            (workdir / "archive").chmod(0o755)
