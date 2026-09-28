@@ -2,7 +2,9 @@
 
 import importlib.util
 import inspect
+import os
 import pathlib
+import sys
 
 import pytest
 
@@ -421,3 +423,259 @@ class TestWritesFile:
         assert result[0] == pytest.ExitCode.TESTS_FAILED
         assert result[1] == {pathlib.Path("missing.txt")}
         assert result[2] == set()
+
+
+# ---------------------------------------------------------------------------
+# Regressions
+# ---------------------------------------------------------------------------
+
+
+class TestModuleExecutionRegressions:
+    """Executing modules for writes/writes_file."""
+
+    def test_module_in_cwd_bytecode_not_reported(self, tmp_path, monkeypatch):
+        """The import system's __pycache__ is not reported as a file created by the student."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "dont_write_bytecode", False)
+        spec = _make_spec(tmp_path, "student_in_cwd", "import pathlib; pathlib.Path('output.txt').write_text('data')")
+        assert writes_file(spec, created={pathlib.Path("output.txt")}) == pytest.ExitCode.OK
+
+    def test_reading_is_not_modifying(self, tmp_path, monkeypatch):
+        """Reading a file (which may update its atime) does not count as modifying it."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        data = workdir / "data.csv"
+        data.write_text("1,2,3\n")
+        past = data.stat().st_mtime - 3600
+        os.utime(data, (past - 3600, past))  # atime older than mtime: the next read updates it
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, "reader", "import pathlib; pathlib.Path('data.csv').read_text()")
+        assert writes_file(spec, modified=set()) == pytest.ExitCode.OK
+
+    def test_same_size_rewrite_is_modification(self, tmp_path, monkeypatch):
+        """Rewriting a file with content of the same size is detected."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        answer = workdir / "answer.txt"
+        answer.write_text("00")
+        os.utime(answer, ns=(0, 0))
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, "rewriter", "import pathlib; pathlib.Path('answer.txt').write_text('42')")
+        assert writes_file(spec, modified={pathlib.Path("answer.txt")}) == pytest.ExitCode.OK
+
+    def test_string_paths_are_accepted(self, tmp_path, monkeypatch):
+        """Expected paths may be given as strings."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, "str_creator", "import pathlib; pathlib.Path('out.txt').write_text('x')")
+        assert writes_file(spec, created={"out.txt"}) == pytest.ExitCode.OK
+
+    def test_dangling_symlink_in_cwd(self, tmp_path, monkeypatch):
+        """Dangling symlinks in the working directory do not crash the file snapshot."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        (workdir / "results.csv").symlink_to(tmp_path / "missing")
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, "noop_link", "x = 1")
+        assert writes_file(spec, created=set()) == pytest.ExitCode.OK
+
+    @pytest.mark.parametrize("check", [writes, writes_file])
+    def test_spec_untouched_when_module_raises(self, check, tmp_path, monkeypatch):
+        """The shared spec is not renamed, even if the module raises."""
+        monkeypatch.chdir(tmp_path)
+        spec = _make_spec(tmp_path, "crashing", "if __name__ == '__main__':\n    raise RuntimeError('crash')")
+        with pytest.raises(RuntimeError, match="crash"):
+            check(spec, name="__main__")
+        assert (spec.name, spec.loader.name) == ("crashing", "crashing")
+
+    def test_sys_exit_zero_is_success(self, tmp_path, monkeypatch):
+        """``sys.exit(main())`` with status 0 counts as a normal run."""
+        monkeypatch.chdir(tmp_path)
+        code = "import sys\n\ndef main():\n    print('Hello')\n    return 0\n\nif __name__ == '__main__':\n    sys.exit(main())\n"
+        spec = _make_spec(tmp_path, "script", code)
+        assert writes(spec, name="__main__", out="Hello\n") == pytest.ExitCode.OK
+        assert writes_file(spec, name="__main__", created=set()) == pytest.ExitCode.OK
+
+    def test_sys_exit_nonzero_fails(self, tmp_path, monkeypatch):
+        """A non-zero exit status fails."""
+        monkeypatch.chdir(tmp_path)
+        spec = _make_spec(tmp_path, "failing_script", "import sys; print('Hello'); sys.exit(2)")
+        assert writes(spec, out="Hello\n") == pytest.ExitCode.TESTS_FAILED
+        assert writes_file(spec)[0] == pytest.ExitCode.TESTS_FAILED
+
+    def test_argv_is_isolated(self, tmp_path, monkeypatch):
+        """Scripts see their own command line, not the grading process's."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "argv", ["ipykernel_launcher.py", "-f", "kernel.json"])
+        code = (
+            "import argparse\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--name', default='World')\n"
+            "print('Hello,', parser.parse_args().name)\n"
+        )
+        spec = _make_spec(tmp_path, "greet", code)
+        assert writes(spec, name="__main__", out="Hello, World\n") == pytest.ExitCode.OK
+        assert writes(spec, name="__main__", out="Hello, Ada\n", argv=["--name", "Ada"]) == pytest.ExitCode.OK
+        assert sys.argv == ["ipykernel_launcher.py", "-f", "kernel.json"]
+
+    def test_dataclass_script(self, tmp_path, monkeypatch):
+        """Scripts using dataclasses with postponed annotations run."""
+        monkeypatch.chdir(tmp_path)
+        code = "from __future__ import annotations\nimport dataclasses\n\n@dataclasses.dataclass\nclass P:\n    x: int\n\nprint(P(1))\n"
+        spec = _make_spec(tmp_path, "dc_script", code)
+        assert writes(spec, out="P(x=1)\n") == pytest.ExitCode.OK
+        assert writes(spec, name="__main__", out="P(x=1)\n") == pytest.ExitCode.OK
+
+
+class TestHasSignatureRegressions:
+    """Annotation handling in has_signature."""
+
+    def test_postponed_annotations_are_evaluated(self, tmp_path):
+        """String annotations from ``from __future__ import annotations`` compare as types."""
+        spec = _make_spec(tmp_path, "annotated", "from __future__ import annotations\n\ndef area(r: float) -> float:\n    return r\n")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def reference(r: float) -> float:
+            return r
+
+        assert has_signature(module.area, inspect.signature(reference), "annotation") == pytest.ExitCode.OK
+
+    def test_return_comparator_argument_order(self):
+        """Custom comparators get (submission, reference) for the return annotation, too."""
+        calls = []
+
+        def compare(fun_value, ref_value):
+            calls.append((fun_value, ref_value))
+            return True
+
+        def func(x: bool) -> bool:
+            return x
+
+        def ref(x: int) -> int:
+            return x
+
+        has_signature(func, inspect.signature(ref), annotation=compare)
+        assert calls == [(bool, int), (bool, int)]
+
+
+class Node:
+    """Class referenced by string (forward reference) annotations."""
+
+
+class TestReviewRegressions:
+    """Regressions found while reviewing the fixes above."""
+
+    def test_same_second_rewrite_is_modification(self, tmp_path, monkeypatch):
+        """A same-size rewrite within the same second (mtimes differ only below a second) is detected."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        answer = workdir / "answer.txt"
+        answer.write_text("00")
+        second = 1_700_000_000 * 10**9
+        os.utime(answer, ns=(second, second))
+        monkeypatch.chdir(workdir)
+        later = second + 500_000_000
+        code = f"import os, pathlib\npathlib.Path('answer.txt').write_text('42')\nos.utime('answer.txt', ns=({later}, {later}))\n"
+        spec = _make_spec(tmp_path, "same_second", code)
+        assert writes_file(spec, modified={pathlib.Path("answer.txt")}) == pytest.ExitCode.OK
+
+    def test_writes_through_symlinked_directory(self, tmp_path, monkeypatch):
+        """Files written through a symlinked directory are detected."""
+        workdir = tmp_path / "work"
+        workdir.mkdir()
+        (tmp_path / "shared").mkdir()
+        (workdir / "data").symlink_to(tmp_path / "shared")
+        (workdir / "loop").symlink_to(workdir)  # a symlink loop is harmless
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, "linked_writer", "import pathlib; pathlib.Path('data/result.txt').write_text('x')")
+        assert writes_file(spec, created={pathlib.Path("data/result.txt")}) == pytest.ExitCode.OK
+
+    def test_string_annotations_on_both_sides(self, tmp_path):
+        """Postponed annotations in reference and submission compare equal."""
+        code = "from __future__ import annotations\n\ndef area(r: float) -> float:\n    return r\n"
+        reference = _make_spec(tmp_path, "reference_area", code)
+        submission = _make_spec(tmp_path, "submission_area", code)
+        modules = []
+        for spec in (reference, submission):
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            modules.append(module)
+        assert has_signature(modules[1].area, inspect.signature(modules[0].area), "annotation") == pytest.ExitCode.OK
+
+    def test_forward_references(self):
+        """Forward references in reference and submission compare equal."""
+
+        def ref_insert(node: "Node", value: int) -> "Node":
+            return node
+
+        def insert(node: "Node", value: int) -> "Node":
+            return node
+
+        assert has_signature(insert, inspect.signature(ref_insert), "annotation") == pytest.ExitCode.OK
+
+    def test_wrong_annotation_still_fails(self, tmp_path):
+        """Evaluating annotations does not make wrong annotations pass."""
+        spec = _make_spec(tmp_path, "wrong_area", "from __future__ import annotations\n\ndef area(r: int) -> int:\n    return r\n")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def reference(r: float) -> float:
+            return r
+
+        assert has_signature(module.area, inspect.signature(reference), "annotation") == pytest.ExitCode.TESTS_FAILED
+
+
+class TestRound3Regressions:
+    """Regressions found in the third review round."""
+
+    @pytest.mark.parametrize("alias", ["aa", "latest", "zz"])
+    def test_directory_alias_does_not_hide_real_path(self, tmp_path, monkeypatch, alias):
+        """Files are reported under their real path, whatever a symlink to their directory is called."""
+        workdir = tmp_path / "work"
+        (workdir / "data").mkdir(parents=True)
+        (workdir / alias).symlink_to(workdir / "data")
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, f"alias_writer_{alias}", "import pathlib; pathlib.Path('data/out.txt').write_text('x')")
+        assert writes_file(spec, created={pathlib.Path("data/out.txt")}) == pytest.ExitCode.OK
+
+    def test_comparator_failing_on_strings(self, tmp_path):
+        """A comparator that raises on string annotations is retried with the evaluated annotations."""
+        spec = _make_spec(tmp_path, "postponed_bool", "from __future__ import annotations\n\ndef f(x: bool) -> bool:\n    return x\n")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def ref(x: int) -> int:
+            return x
+
+        assert has_signature(module.f, inspect.signature(ref), annotation=issubclass) == pytest.ExitCode.OK
+
+    def test_comparator_failing_on_both_forms(self):
+        """A comparator that raises on every form is a failure, not a crash."""
+
+        def f(x: int) -> int:
+            return x
+
+        def broken(fun_value, ref_value):
+            raise RuntimeError("broken comparator")
+
+        assert has_signature(f, inspect.signature(f), annotation=broken) == pytest.ExitCode.TESTS_FAILED
+
+
+class TestRound4Regressions:
+    """Regressions found in the fourth review round."""
+
+    def test_directory_that_cannot_be_entered(self, tmp_path, monkeypatch):
+        """A directory that can be listed but not entered is skipped instead of crashing."""
+        workdir = tmp_path / "work"
+        (workdir / "archive" / "2025").mkdir(parents=True)
+        (workdir / "archive").chmod(0o644)
+        monkeypatch.chdir(workdir)
+        try:
+            if os.access(workdir / "archive" / "2025", os.F_OK):
+                pytest.skip("permissions are not enforced (e.g. running as root)")
+            spec = _make_spec(tmp_path, "writer_next_to_locked", "import pathlib; pathlib.Path('out.txt').write_text('x')")
+            assert writes_file(spec, created={pathlib.Path("out.txt")}) == pytest.ExitCode.OK
+        finally:
+            (workdir / "archive").chmod(0o755)

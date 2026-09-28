@@ -33,7 +33,7 @@ dynamic = ["description", "version"]
 dependencies = [
   "numpy",
   "pytest >=8",
-  "pyyaml"
+  "pyyaml >=5.1"
 ]
 
 [project.entry-points."pytest11"]
@@ -46,6 +46,8 @@ dev = [
   "coverage >=7.5.0",
   "deptry >=0.25.1",
   "flit >=3.12.0,<4.0",
+  # flit 3 does not pin flit_core, and flit 3's CLI fails with flit_core 4
+  "flit_core >=3.12.0,<4.0",
   "mypy >=1.18.2",
   "numpydoc >=1.10.0",
   "pre-commit >=3.5.0",
@@ -156,21 +158,25 @@ relative_files = true
 source = ["pytest_nbgrader"]
 
 [tool.deptry]
-extend_exclude = ["docs"]
-pep621_dev_dependency_groups = ["all", "dev", "docs"]
+extend_exclude = [".tox", "docs"]
+known_first_party = ["pytest_nbgrader"]
+optional_dependencies_dev_groups = ["all", "dev", "docs"]
 
 [tool.flit.sdist]
 include = [
   ".zenodo.json",
   "AUTHORS.rst",
   "CHANGELOG.rst",
+  "CITATION.cff",
   "CONTRIBUTING.rst",
   "LICENSE",
   "Makefile",
   "README.rst",
   "environment-docs.yml",
+  "docs/*.rst",
   "docs/Makefile",
   "docs/conf.py",
+  "docs/guide/*.rst",
   "docs/make.bat",
   "src/pytest_nbgrader",
   "tests/*.py",
@@ -240,9 +246,15 @@ override_SS05 = [
 addopts = [
   "-ra",
   "--color=yes",
-  "--verbose"
+  "--verbose",
+  # Unit tests call the plugin hooks directly; not auto-loading the plugin lets coverage measure its import.
+  # End-to-end tests run their own pytest sessions (pytester), which load the plugin as usual.
+  "-p",
+  "no:pytest-nbgrader",
+  "-p",
+  "pytester"
 ]
-filterwarnings = ["ignore::UserWarning"]
+filterwarnings = ["error"]
 testpaths = [
   "tests"
 ]

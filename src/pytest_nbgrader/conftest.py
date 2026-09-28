@@ -4,6 +4,7 @@ Pytest configuration module.
 pytest internals:
   pytest_addoption -- add custom options to test a single subtask at a time
   pytest_generate_tests -- generate tests programmatically from `tests.pickle`
+  pytest_collection_modifyitems -- refuse test cases that would test nothing
 
 pytest fixtures:
   verbosity -- provide verbosity level for outputs
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 __all__ = [
     "pytest_addoption",
+    "pytest_collection_modifyitems",
     "pytest_generate_tests",
     "pytest_sessionfinish",
     "pytest_sessionstart",
@@ -26,6 +28,7 @@ __all__ = [
 
 import pathlib
 import warnings
+from collections.abc import Mapping
 
 import pytest
 
@@ -57,6 +60,9 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+_FIXTURES = ("prerequisites", "assertions", "cases")
+
+
 def pytest_sessionstart(session: pytest.Session) -> None:
     """
     Collect manual and automatic test cases.
@@ -65,28 +71,36 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     ----------
     session : pytest.Session
         The pytest session object.
+
+    Raises
+    ------
+    pytest.UsageError
+        If the test cases file cannot be loaded or does not contain a ``TestSubtask``.
     """
     import yaml
 
     # TODO: Collect yaml files with pytest_collection instead
     cases = session.config.getoption("cases")
-    if cases is not None:
-        # load cases from yaml
-        if not pathlib.Path(cases).is_file():
-            raise FileNotFoundError(f"{cases!r} is not a file.")
+    if cases is None:
+        session.config.option.test_cases = None
+        return
+
+    # load cases from yaml
+    try:
         with pathlib.Path(cases).open("rb") as f:
             test_cases = yaml.unsafe_load(f)
-        session.config.option.test_cases = test_cases
+    except (OSError, yaml.YAMLError) as e:
+        raise pytest.UsageError(f"pytest-nbgrader: cannot load test cases from {cases!r}: {e}") from e
+    if not all(hasattr(test_cases, attribute) for attribute in ("cases", "assertions")):
+        raise pytest.UsageError(f"pytest-nbgrader: {cases!r} does not contain a TestSubtask.")
+    session.config.option.test_cases = test_cases
 
-        if session.config.option.auto:
-            import uuid
+    if session.config.option.auto:
+        import uuid
 
-            test_file = pathlib.Path(f"test_auto_{uuid.uuid4()}.py")
-            test_file.symlink_to(pytest_nbgrader.harness.__file__)
-            session.config.option.auto = test_file
-
-    else:
-        session.config.option.test_cases = None
+        test_file = pathlib.Path(f"test_auto_{uuid.uuid4()}.py")
+        test_file.symlink_to(pytest_nbgrader.harness.__file__)
+        session.config.option.auto = test_file
 
 
 def pytest_sessionfinish(session: pytest.Session) -> None:
@@ -98,8 +112,47 @@ def pytest_sessionfinish(session: pytest.Session) -> None:
     session : pytest.Session
         The pytest session object.
     """
-    if isinstance(session.config.option.auto, pathlib.Path):
-        session.config.option.auto.unlink()
+    auto = getattr(session.config.option, "auto", None)
+    if isinstance(auto, pathlib.Path):
+        auto.unlink(missing_ok=True)
+
+
+def _items(parameters: object) -> list:
+    """
+    List the ``(key, value)`` items of a prerequisites or assertions dict (or list of pairs).
+
+    Parameters
+    ----------
+    parameters : object
+        A dict, a list of ``(key, value)`` pairs, or None.
+
+    Returns
+    -------
+    list
+        The ``(key, value)`` items.
+    """
+    if not parameters:
+        return []
+    return list(parameters.items()) if isinstance(parameters, Mapping) else list(parameters)
+
+
+def _parameter(key: object, value: object) -> object:
+    """
+    Wrap a prerequisites or assertions item as a pytest parameter with a readable id.
+
+    Parameters
+    ----------
+    key : object
+        Function (or label) the item is keyed by.
+    value : object
+        The ``(args, kwargs)`` pair, or ``(function, (args, kwargs))`` for labelled items.
+
+    Returns
+    -------
+    object
+        A ``pytest.param`` of the ``(key, value)`` item.
+    """
+    return pytest.param((key, value), id=getattr(key, "__name__", str(key)))
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -111,17 +164,54 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     metafunc : pytest.Metafunc
         The metafunc object for parametrizing test functions.
     """
-    cases = metafunc.config.getoption("test_cases")
-    if cases:
-        for fixture in ["prerequisites", "assertions", "cases"]:
-            if fixture in metafunc.fixturenames:
-                parameters = getattr(cases, fixture)
-                if isinstance(parameters, dict):
-                    parameters = parameters.items()
-                metafunc.parametrize(fixture, parameters)
+    requested = [fixture for fixture in _FIXTURES if fixture in metafunc.fixturenames]
+    if not requested:
+        return
 
-    else:
-        warnings.warn(UserWarning("pytest-nbgrader: No data for automatic tests found."), stacklevel=2)
+    cases = metafunc.config.getoption("test_cases")
+    if not cases:
+        warnings.warn(UserWarning("pytest-nbgrader: No data for automatic tests found."), stacklevel=1)
+        return
+
+    for fixture in requested:
+        if fixture == "cases":
+            parameters = [pytest.param(case, id=str(index)) for index, case in enumerate(cases.cases)]
+        else:
+            parameters = [_parameter(key, value) for key, value in _items(getattr(cases, fixture, None))]
+        if not parameters:
+            # an explicit skip instead of an empty parameter set (which may be configured to fail)
+            parameters = [pytest.param(None, id="none", marks=pytest.mark.skip(reason=f"no {fixture}"))]
+        metafunc.parametrize(fixture, parameters)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """
+    Refuse test cases that would make the built-in harness pass without testing anything.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        The pytest config object.
+    items : list of pytest.Item
+        The collected test items.
+
+    Raises
+    ------
+    pytest.UsageError
+        If the test cases define no cases or no assertions (and no prerequisites) and no other
+        collected test (e.g. a custom harness) uses them.
+    """
+    test_cases = getattr(config.option, "test_cases", None)
+    if not test_cases or _items(getattr(test_cases, "prerequisites", None)) or (test_cases.cases and _items(test_cases.assertions)):
+        return
+
+    harness_file = pathlib.Path(pytest_nbgrader.harness.__file__).resolve()
+    using_cases = [item for item in items if "cases" in getattr(item, "fixturenames", ())]
+    if using_cases and all(pathlib.Path(item.path).resolve() == harness_file for item in using_cases):
+        raise pytest.UsageError(
+            "pytest-nbgrader: the test cases define no cases or no assertions, so nothing would be tested. "
+            "Use --noauto (or runner.main(..., auto=False)) if only a custom harness should run."
+        )
 
 
 @pytest.fixture
@@ -152,4 +242,7 @@ def submission() -> object:
     object
         The stored student submission.
     """
-    return pytest_nbgrader.loader.Submission.submission
+    stored = pytest_nbgrader.loader.Submission.submission
+    if stored is None:
+        pytest.fail("pytest-nbgrader: no submission found. Call Submission.submit() before running the tests.", pytrace=False)
+    return stored

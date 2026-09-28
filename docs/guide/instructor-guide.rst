@@ -69,11 +69,18 @@ instantiation:
    # Instantiate Point(1, 2) and Point(3, 4)
    TestCase(
        inputs=[((1, 2), {}), ((3, 4), {})],
-       expected=((), {}),
+       expected=((Point(1, 2), Point(3, 4)), {}),
    )
 
-The resulting objects are compared using attribute assertions like ``equal_attributes``
-or ``close_attributes``.
+``expected`` holds one reference object per instantiation. The resulting objects are compared
+pairwise using attribute assertions like ``equal_attributes`` or ``close_attributes``; a
+different number of objects fails.
+
+.. note::
+
+   The reference objects are stored with their attributes and class name, so their class must
+   be importable when the YAML file is loaded — define it in a module that ships with the
+   tests rather than in the data generation notebook.
 
 Testing Exceptions
 ------------------
@@ -89,11 +96,16 @@ To test that code raises an exception, set ``raises=True``:
    )
 
 Use the ``raises`` assertion to verify the exception type (see :doc:`assertions-reference`).
+``raises=True`` cases may share a subtask with ordinary cases: the built-in value assertions
+(such as ``equal_value``) are not applied to the exception, and a submission that does not
+raise fails the ``raises`` assertion. Custom assertions receive the exception as ``outputs``;
+set ``my_assertion.accepts_exceptions = False`` on a custom value assertion to skip it for
+such cases instead.
 
 Timing Constraints
 ------------------
 
-To enforce execution time bounds:
+To check execution time bounds:
 
 .. code-block:: python
 
@@ -103,7 +115,8 @@ To enforce execution time bounds:
        timing=(None, 2.0),  # must finish within 2 seconds
    )
 
-Use with the ``time_bounds`` assertion.
+Use with the ``time_bounds`` assertion. The time is checked after the call returns: code that
+never finishes is not interrupted by pytest-nbgrader, only by nbgrader's cell timeout.
 
 
 Choosing Assertions
@@ -125,8 +138,8 @@ For Code Strings
 ----------------
 
 - :func:`~pytest_nbgrader.assertions.equal_value` — exact equality of named variables (pass variable names as ``*args``)
-- :func:`~pytest_nbgrader.assertions.equal_scope` — all expected variables are defined
-- :func:`~pytest_nbgrader.assertions.equal_types` — variable types match
+- :func:`~pytest_nbgrader.assertions.equal_scope` — the set of variable names matches the expected scope exactly (extra helper variables or imports fail)
+- :func:`~pytest_nbgrader.assertions.equal_types` — variables are instances of the expected types (subclasses pass, e.g. ``bool`` where ``int`` is expected)
 - :func:`~pytest_nbgrader.assertions.almost_equal` — approximate equality of named variables
 
 For Classes
@@ -171,6 +184,10 @@ Verify that a student's function has the correct parameter names:
 ``has_signature`` compares parameter names, and optionally types, defaults, and return
 annotations via the ``*strict_comparisons`` and ``**comparisons`` arguments.
 
+The prerequisites dict maps a label (used as the test id) to ``(function, (args, kwargs))``.
+Like assertions, it may also be keyed by the function itself:
+``prerequisites={has_signature: ((ref_sig,), {})}``.
+
 Module Output Checking
 ----------------------
 
@@ -181,6 +198,10 @@ For path/module submissions, verify stdout/stderr output during import:
    from pytest_nbgrader.prerequisites import writes
 
    prerequisites={"output": (writes, ((), {"out": "Hello, World!\n"}))}
+
+Pass ``name="__main__"`` to run the module as a script (its ``if __name__ == "__main__":``
+block runs) and ``argv=[...]`` for its command line arguments. ``sys.exit(0)`` counts as a
+normal run; a non-zero exit status fails.
 
 File Write Checking
 -------------------
@@ -193,6 +214,10 @@ Verify which files a module creates, deletes, or modifies during import:
    from pytest_nbgrader.prerequisites import writes_file
 
    prerequisites={"files": (writes_file, ((), {"created": {Path("output.txt")}}))}
+
+Paths are relative to the directory pytest runs in; ``created``, ``deleted`` and ``modified``
+must match exactly. Files in ``__pycache__`` directories are ignored. A file written through a
+symlink to a directory inside the working directory is reported under its real path.
 
 
 Packaging with TestSubtask
@@ -229,7 +254,17 @@ The format is ``{function: (extra_positional_args, extra_keyword_args)}``.
 The ``case`` and ``outputs`` arguments are passed automatically by the harness.
 
 When pytest runs, each case is tested against **each** assertion, creating a
-Cartesian product of ``len(cases) × len(assertions)`` test nodes.
+Cartesian product of ``len(cases) × len(assertions)`` test nodes, plus one node per
+prerequisite (a single skipped node if there are none). A subtask needs at least one case and
+one assertion (or a prerequisite); otherwise the run stops with a usage error instead of passing
+vacuously — unless another collected test, such as a custom harness, uses the cases.
+
+Functions used in assertions and prerequisites must be importable by the students' kernels:
+define custom assertions at the top level of a module, not in the data generation notebook.
+The dumper refuses lambdas, methods, and functions defined in ``__main__``.
+
+Instead of a dict, assertions and prerequisites may also be a list of
+``(function, (args, kwargs))`` pairs.
 
 Generating Test Cases Programmatically
 --------------------------------------
@@ -319,6 +354,20 @@ using Python-specific YAML tags:
 .. code-block:: yaml
 
    !!python/object:pytest_nbgrader.cases.TestSubtask
+   cases:
+   - !!python/object:pytest_nbgrader.cases.TestCase
+     inputs: !!python/tuple
+     - !!python/tuple []
+     - a: 1
+       b: 2
+     expected: !!python/tuple
+     - !!python/tuple []
+     - a: 2
+       b: 1
+     raises: false
+     timing: !!python/tuple
+     - null
+     - null
    assertions:
      ? !!python/name:pytest_nbgrader.assertions.equal_value ''
      : !!python/tuple
@@ -326,20 +375,7 @@ using Python-specific YAML tags:
        - a
        - b
      - {}
-   cases:
-   - !!python/object:pytest_nbgrader.cases.TestCase
-     expected: !!python/tuple
-     - !!python/tuple []
-     - a: 2
-       b: 1
-     inputs: !!python/tuple
-     - !!python/tuple []
-     - a: 1
-       b: 2
-     raises: false
-     timing: !!python/tuple
-     - null
-     - null
+   prerequisites: {}
 
 The ``!!python/object`` and ``!!python/name`` tags let ``yaml.unsafe_load()`` reconstruct
 the original Python objects at load time. You don't need to read or edit these files — they
@@ -352,6 +388,12 @@ are generated by the dumper and consumed by the plugin automatically.
    (e.g., your institution's LMS or nbgrader's exchange directory). Students should never
    load YAML files from untrusted sources.
 
+.. note::
+
+   The YAML files contain every expected output in plain text, and students receive them.
+   The tests also run in the student's own kernel, so they are a self-check rather than a
+   tamper-proof exam. Keep hidden test cases out of ``release/`` and review submissions.
+
 
 Writing Custom Test Harnesses
 =============================
@@ -362,7 +404,7 @@ the YAML data.
 
 .. code-block:: python
 
-   # tests/MyTask/tests.py
+   # tests/MyTask/test_mytask.py
    import pytest
    from pytest_nbgrader.assertions import close_attributes
    from pytest_nbgrader.cases import format_result
@@ -380,15 +422,22 @@ the YAML data.
            if result is not pytest.ExitCode.OK:
                pytest.fail(format_result(cases.inputs[0], result, message))
 
-In the student notebook, run both the YAML tests and the custom harness:
+Here ``cases.expected`` holds the reference object, e.g. ``expected=((Circle(1.0),), {})``.
+Give each harness file a unique name: with pytest's default import mode, two files named
+``tests.py`` in different task directories cannot both be imported in the same kernel.
+
+In the student notebook, run the custom harness with the YAML data:
 
 .. code-block:: python
 
    pytest.main([
        "-qq", "-x",
        "--cases", "tests/MyTask/data.yml",
-       "tests/MyTask/tests.py::TestCircle",
+       "tests/MyTask/test_mytask.py::TestCircle",
    ])
+
+Since a test path is given, only the custom harness runs; ``data.yml`` needs no assertions.
+To run the YAML assertions as well, pass the path to ``runner.main()`` (see below).
 
 
 Using ``runner.main()``
@@ -409,13 +458,16 @@ This is equivalent to:
 
    pytest.main([
        "-p", "no:pytest-nbgrader",
+       "-W", "ignore::pytest.PytestAssertRewriteWarning",
        "--cases=tests/Addition/basic.yml",
+       "--noauto",
        "harness.py::TestClass",
    ])
 
 ``runner.main()`` creates temporary symlinks to the built-in ``harness.py`` and ``conftest.py``
 in the current directory, runs pytest, then cleans up. It accepts additional ``*args`` that are
-forwarded to ``pytest.main()``.
+forwarded to ``pytest.main()``, e.g. the path of a custom harness. With ``auto=False`` the
+built-in test class is not run, only the tests given in ``*args``.
 
 .. note::
 

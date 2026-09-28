@@ -5,7 +5,9 @@ from __future__ import annotations
 
 __all__ = ["TemporarySymlink", "TemporarySymlinks", "main"]
 
+import contextlib
 import pathlib
+import sys
 import types as _types
 
 import pytest
@@ -35,7 +37,8 @@ def main(
     case_dir : str, optional
         Directory containing test case files, by default ``"tests"``.
     auto : bool, optional
-        Whether to auto-generate test class, by default True.
+        Whether to run the built-in test class (``harness.py::TestClass``), by default True.
+        With ``auto=False`` only the tests passed in ``*args`` are run.
     **kwargs : dict
         Additional keyword arguments passed to ``pytest.main``.
 
@@ -43,26 +46,76 @@ def main(
     -------
     int
         The pytest exit code.
+
+    Raises
+    ------
+    RuntimeError
+        If no submission has been stored.
+    ValueError
+        If ``task`` is given without ``subtask``.
+    FileNotFoundError
+        If the test cases file does not exist.
     """
     # ensure existence of submission
-    if not loader.Submission.submission:
+    if loader.Submission.submission is None:
         raise RuntimeError("No submission found. Call submit() first.")
+    if task is not None and subtask is None:
+        raise ValueError("task requires subtask.")
 
-    pytest_args = ["-p", "no:pytest-nbgrader"]
+    pytest_args = ["-p", "no:pytest-nbgrader", "-W", "ignore::pytest.PytestAssertRewriteWarning"]
 
     if subtask is not None:
         cases = pathlib.Path(case_dir) / (task or "") / f"{subtask}.yml"
         if not cases.is_file():
             raise FileNotFoundError("Test cases could not be found.")
-        pytest_args.append(f"--{cases=!s}")
+        # The harness is added explicitly below, so the plugin must not generate its own test file.
+        pytest_args.extend([f"--{cases=!s}", "--noauto"])
 
     pytest_args.extend(args)
 
     if auto:
         pytest_args.append("harness.py::TestClass")
 
+    # pytest keeps the symlinked harness imported as module "harness"; a stale entry from a run in
+    # another directory would make pytest refuse to import it again ("import file mismatch").
+    stale = getattr(sys.modules.get("harness"), "__file__", None)
+    if stale is not None:
+        stale_path, harness_path = pathlib.Path(stale), pathlib.Path(harness.__file__)
+        if stale_path.name == harness_path.name and (not stale_path.exists() or stale_path.resolve() == harness_path.resolve()):
+            del sys.modules["harness"]
+
     with TemporarySymlinks(conftest, harness):
         return pytest.main(pytest_args, **kwargs)
+
+
+def _is_stale_link(path: pathlib.Path, module: _types.ModuleType) -> bool:
+    """
+    Tell whether ``path`` is a symlink to a copy of ``module``'s file that no longer applies.
+
+    Such links are left behind by runs that were interrupted in another environment, e.g. before
+    the package was reinstalled elsewhere. A valid link to the module's current file is not stale:
+    it is treated like any other custom file.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to check.
+    module : module
+        The module whose file the link should point to.
+
+    Returns
+    -------
+    bool
+        True if ``path`` is a symlink to a file of the same name in a directory of the same name
+        as the module's file, but not to the module's file itself.
+    """
+    if not path.is_symlink():
+        return False
+    target = pathlib.Path(module.__file__)
+    if path.exists() and path.resolve() == target.resolve():
+        return False
+    link = path.readlink()
+    return (link.name, link.parent.name) == (target.name, target.parent.name)
 
 
 class TemporarySymlink:
@@ -96,17 +149,22 @@ class TemporarySymlink:
         if destination is None:
             destination = pathlib.Path(module.__file__).name
         self.path = pathlib.Path(destination)
-        self.custom = self.path.exists()
+        self.custom = False
 
     def __enter__(self) -> pathlib.Path:
         """
         Create the symlink if no custom file exists.
+
+        A stale symlink to the module (e.g. from another environment) is replaced and removed on exit.
 
         Returns
         -------
         pathlib.Path
             The symlink path.
         """
+        if _is_stale_link(self.path, self.module):
+            self.path.unlink()
+        self.custom = self.path.exists() or self.path.is_symlink()
         if not self.custom:
             self.path.symlink_to(self.module.__file__)
         return self.path
@@ -130,7 +188,7 @@ class TemporarySymlink:
             Traceback, if any.
         """
         if not self.custom:
-            self.path.unlink()
+            self.path.unlink(missing_ok=True)
 
 
 class TemporarySymlinks:
@@ -146,6 +204,7 @@ class TemporarySymlinks:
     """
 
     symlinks: list[TemporarySymlink]
+    _stack: contextlib.ExitStack
 
     def __init__(self, *args: _types.ModuleType, **kwargs: _types.ModuleType) -> None:
         """
@@ -169,8 +228,11 @@ class TemporarySymlinks:
         TemporarySymlinks
             The manager instance.
         """
-        for symlink in self.symlinks:
-            symlink.__enter__()
+        with contextlib.ExitStack() as stack:
+            for symlink in self.symlinks:
+                stack.enter_context(symlink)
+            # keep the symlinks only if all of them were created
+            self._stack = stack.pop_all()
         return self
 
     def __exit__(
@@ -191,5 +253,4 @@ class TemporarySymlinks:
         traceback : types.TracebackType or None
             Traceback, if any.
         """
-        for symlink in self.symlinks:
-            symlink.__exit__(exc_type, exc_value, traceback)
+        self._stack.__exit__(exc_type, exc_value, traceback)

@@ -20,10 +20,10 @@ updates:
       interval: "quarterly"
     cooldown:
       default-days: 7
+    # Only raise lower bounds when the new version requires it (keep supporting e.g. pytest 8)
+    versioning-strategy: increase-if-necessary
     groups:
-      ci:
-        patterns:
-          - "CI/*"
+      # patterns match dependency names
       python:
         patterns:
-          - "pyproject.toml"
+          - "*"

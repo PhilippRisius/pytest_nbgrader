@@ -27,8 +27,7 @@ on:
       - CONTRIBUTING.rst
       - Makefile
       - .readthedocs.yml
-      - docs/*.py
-      - docs/*.rst
+      - docs/**
       - environment-docs.yml
       - pyproject.toml
       - tests/**.py

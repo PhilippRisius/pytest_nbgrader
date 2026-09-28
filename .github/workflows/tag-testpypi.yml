@@ -59,10 +59,12 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             files.pythonhosted.org:443
+            fulcio.sigstore.dev:443
             github.com:443
             pypi.org:443
-            ruf-repo-cdn.sigstore.dev:443
+            rekor.sigstore.dev:443
             test.pypi.org:443
+            tuf-repo-cdn.sigstore.dev:443
 
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -80,7 +82,7 @@ jobs:
 
       - name: Build a binary wheel and a source tarball
         run: |
-          python -m flit build
+          python -m flit build --no-use-vcs
 
       - name: Publish distribution 📦 to Test PyPI
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0

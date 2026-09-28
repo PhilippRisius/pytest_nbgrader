@@ -39,7 +39,7 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
           body-includes: |
-            This Pull Request modifies GitHub workflows and is coming from a fork.
+            This Pull Request modifies GitHub Workflows and is coming from a fork.
 
       - name: Create Warning Comment
         if: |

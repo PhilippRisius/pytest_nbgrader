@@ -6,16 +6,53 @@ from __future__ import annotations
 __all__ = ["TestClass"]
 
 import traceback
+from collections.abc import Callable
 
 import pytest
 
-from pytest_nbgrader.cases import TestCase, execute, format_result
+from pytest_nbgrader.cases import TestCase, execute, format_result, raised_by_submission
+
+
+def _unpack(parameter: tuple) -> tuple[Callable, tuple, dict]:
+    """
+    Unpack a parametrized prerequisite or assertion.
+
+    Parameters
+    ----------
+    parameter : tuple
+        An item of the prerequisites or assertions dict: either ``(function, (args, kwargs))``
+        or ``(label, (function, (args, kwargs)))``.
+
+    Returns
+    -------
+    tuple
+        A ``(function, args, kwargs)`` triple.
+    """
+    head, spec = parameter
+    function, (args, kwargs) = (head, spec) if callable(head) else spec
+    return function, args, kwargs
+
+
+def _traceback_limit(verbosity: int) -> int | None:
+    """
+    Choose how many traceback frames to report.
+
+    Parameters
+    ----------
+    verbosity : int
+        Verbosity level for output formatting.
+
+    Returns
+    -------
+    int or None
+        ``None`` (full traceback) when verbose, otherwise ``-1`` (innermost frame only).
+    """
+    return None if verbosity > 0 else -1
 
 
 class TestClass:
     """Generic pytest class."""
 
-    @pytest.mark.tryfirst
     def test_prerequisites(self, submission: object, prerequisites: tuple) -> None:
         """
         Run prerequisites tests against student submission.
@@ -27,7 +64,7 @@ class TestClass:
         prerequisites : tuple
             A ``(function, (args, kwargs))`` pair for the prerequisite check.
         """
-        function, (args, kwargs) = prerequisites
+        function, args, kwargs = _unpack(prerequisites)
         if function(submission, *args, **kwargs) is not pytest.ExitCode.OK:
             pytest.fail(
                 """
@@ -38,7 +75,7 @@ class TestClass:
             )
 
     @pytest.fixture
-    def test_execution(self, submission: object, cases: TestCase, verbosity: int) -> tuple[TestCase, tuple[tuple, dict, float] | Exception]:
+    def test_execution(self, submission: object, cases: TestCase, verbosity: int) -> tuple[TestCase, tuple[tuple, dict, float] | BaseException]:
         """
         Run student submission on test cases.
 
@@ -54,23 +91,20 @@ class TestClass:
         Returns
         -------
         tuple
-            A ``(case, result)`` pair.
+            A ``(case, result)`` pair. For ``raises=True`` cases, ``result`` is the exception
+            raised by the submission.
         """
         try:
-            result = execute(submission, cases)
-        except Exception as e:
-            if cases.raises:
+            return cases, execute(submission, cases)
+        except (Exception, SystemExit) as e:
+            if cases.raises and raised_by_submission(e):
                 # forward the (expected) exception to be checked
-                result = e
-            else:
-                result = pytest.ExitCode.INTERNAL_ERROR
-                limit = (verbosity > 0) - 1
-                exception = traceback.format_exc(limit=limit)
-                pytest.fail(
-                    format_result(cases.inputs, result, exception=exception),
-                    pytrace=False,
-                )
-        return cases, result
+                return cases, e
+            exception = traceback.format_exc(limit=_traceback_limit(verbosity))
+        pytest.fail(
+            format_result(cases.inputs, pytest.ExitCode.INTERNAL_ERROR, exception=exception),
+            pytrace=False,
+        )
 
     def test_assertion(self, test_execution: tuple, assertions: tuple, verbosity: int) -> None:
         """
@@ -86,16 +120,19 @@ class TestClass:
             Verbosity level for output formatting.
         """
         case, outputs = test_execution
-        function, (args, kwargs) = assertions
+        function, args, kwargs = _unpack(assertions)
+        if isinstance(outputs, BaseException) and not getattr(function, "accepts_exceptions", True):
+            # the expected exception was raised; value assertions do not apply to it
+            return
+
         try:
             result, message = function(case, outputs, *args, **kwargs)
             exception = None
 
         except Exception:
-            limit = (verbosity > 0) - 1
             result = pytest.ExitCode.INTERNAL_ERROR
             message = None
-            exception = traceback.format_exc(limit=limit)
+            exception = traceback.format_exc(limit=_traceback_limit(verbosity))
 
         if result is not pytest.ExitCode.OK:
             pytest.fail(

@@ -1,7 +1,14 @@
 """Tests for dumper.py — dump_exercise, dump_task, dump_subtask append mode."""
 
+import functools
+import importlib
+import pathlib
+import sys
+
+import pytest
 import yaml
 
+from pytest_nbgrader.assertions import equal_value
 from pytest_nbgrader.cases import TestCase, TestSubtask
 from pytest_nbgrader.dumper import dump_exercise, dump_subtask, dump_task
 
@@ -35,7 +42,7 @@ class TestDumpSubtask:
         assert size_after_second > size_after_first
 
     def test_append_mode_both_subtasks_in_file(self, tmp_path):
-        """Both subtasks' data present in appended file."""
+        """Appending merges both subtasks into a single loadable subtask."""
         yaml_file = tmp_path / "test.yml"
 
         subtask1 = _make_subtask(cases=[TestCase(inputs=((111,), {}), expected=((111,), {}))])
@@ -44,10 +51,9 @@ class TestDumpSubtask:
         dump_subtask(subtask1, to=yaml_file, append=False)
         dump_subtask(subtask2, to=yaml_file, append=True)
 
-        content = yaml_file.read_text()
-        assert content.count("TestSubtask") == 2
-        assert "111" in content
-        assert "222" in content
+        with yaml_file.open("rb") as f:
+            loaded = yaml.unsafe_load(f)
+        assert [case.inputs for case in loaded.cases] == [((111,), {}), ((222,), {})]
 
     def test_creates_parent_dirs(self, tmp_path):
         """dump_subtask creates parent directories if needed."""
@@ -110,3 +116,131 @@ class TestDumpExercise:
         """Empty exercise creates just the root directory."""
         dump_exercise({}, to=tmp_path / "empty")
         assert (tmp_path / "empty").is_dir()
+
+
+class TestDumpRegressions:
+    """Serialization details that affect grading."""
+
+    def test_dict_order_preserved(self, tmp_path):
+        """Dict inputs keep their insertion order (keys are not sorted)."""
+        case = TestCase(inputs=(({"the": 3, "quick": 1, "brown": 1},), {"width": 3, "height": 4}), expected=((["the", "quick", "brown"],), {}))
+        dump_subtask(_make_subtask(cases=[case]), to=tmp_path / "order.yml")
+        with (tmp_path / "order.yml").open("rb") as f:
+            (loaded,) = yaml.unsafe_load(f).cases
+        assert list(loaded.inputs[0][0]) == ["the", "quick", "brown"]
+        assert list(loaded.inputs[1]) == ["width", "height"]
+
+    def test_str_paths(self, tmp_path):
+        """Target paths may be strings."""
+        dump_exercise({"task": {"sub": _make_subtask()}}, to=str(tmp_path / "tests"))
+        dump_subtask(_make_subtask(), to=str(tmp_path / "single.yml"))
+        assert (tmp_path / "tests" / "task" / "sub.yml").exists()
+        assert (tmp_path / "single.yml").exists()
+
+    def test_paths_are_portable(self, tmp_path):
+        """Paths are written as pathlib.Path, which loads on every Python version and OS."""
+        case = TestCase(inputs=((pathlib.Path("a/b.txt"),), {}), expected=((), {}))
+        dump_subtask(_make_subtask(cases=[case]), to=tmp_path / "paths.yml")
+        text = (tmp_path / "paths.yml").read_text()
+        assert "python/object/apply:pathlib.Path" in text
+        assert "PosixPath" not in text
+        with (tmp_path / "paths.yml").open("rb") as f:
+            assert yaml.unsafe_load(f).cases[0].inputs[0][0] == pathlib.Path("a/b.txt")
+
+    def test_lambda_is_refused(self, tmp_path):
+        """Functions that students' kernels cannot import are refused at dump time."""
+        subtask = _make_subtask(assertions={(lambda case, outputs: None): ((), {})})
+        with pytest.raises(yaml.representer.RepresenterError, match="importable module"):
+            dump_subtask(subtask, to=tmp_path / "lambda.yml")
+        assert not (tmp_path / "lambda.yml").exists()
+
+    def test_main_function_is_refused(self, tmp_path):
+        """Functions defined in __main__ (e.g. an instructor's notebook) are refused."""
+
+        def check(case, outputs):
+            return None
+
+        check.__module__ = "__main__"
+        check.__qualname__ = "check"
+        with pytest.raises(yaml.representer.RepresenterError, match="__main__.check"):
+            dump_subtask(_make_subtask(assertions={check: ((), {})}), to=tmp_path / "main.yml")
+
+    def test_library_functions_are_dumped(self, tmp_path):
+        """Functions from importable modules are dumped by name."""
+        dump_subtask(_make_subtask(assertions={equal_value: ((), {})}), to=tmp_path / "ok.yml")
+        with (tmp_path / "ok.yml").open("rb") as f:
+            assert equal_value in yaml.unsafe_load(f).assertions
+
+
+class _Checks:
+    """Holder for a static method that cannot be imported by module and name."""
+
+    @staticmethod
+    def positive(case, outputs):
+        """Return nothing."""
+
+
+class TestDumpReviewRegressions:
+    """Regressions found while reviewing the fixes above."""
+
+    def test_method_is_refused(self, tmp_path):
+        """A static method would be written as <module>.<name>, which does not resolve."""
+        with pytest.raises(yaml.representer.RepresenterError, match="top level of an importable module"):
+            dump_subtask(_make_subtask(assertions={_Checks.positive: ((), {})}), to=tmp_path / "method.yml")
+
+    def test_inline_wrapper_is_refused(self, tmp_path):
+        """A wrapper created inline would load as the wrapped function, a different object."""
+        wrapper = functools.wraps(equal_value)(lambda *a, **kw: None)
+        with pytest.raises(yaml.representer.RepresenterError):
+            dump_subtask(_make_subtask(assertions={wrapper: ((), {})}), to=tmp_path / "wrapper.yml")
+
+    def test_append_list_of_pairs(self, tmp_path):
+        """Appending merges assertions given as lists of pairs."""
+        yaml_file = tmp_path / "pairs.yml"
+        dump_subtask(_make_subtask(assertions=[(equal_value, (("a",), {}))]), to=yaml_file)
+        dump_subtask(_make_subtask(assertions={equal_value: (("b",), {})}), to=yaml_file, append=True)
+        with yaml_file.open("rb") as f:
+            loaded = yaml.unsafe_load(f)
+        assert loaded.assertions == [(equal_value, (("a",), {})), (equal_value, (("b",), {}))]
+
+
+class TestDumpRound3Regressions:
+    """Regressions found in the third review round."""
+
+    @pytest.mark.parametrize("path", [pathlib.PureWindowsPath(r"C:\Users\alice\notes.txt"), pathlib.PurePosixPath("a/b.txt")])
+    def test_pure_paths_keep_their_flavour(self, tmp_path, path):
+        """Pure paths are loaded with their own class (e.g. a Windows drive survives on Linux)."""
+        dump_subtask(_make_subtask(cases=[TestCase(inputs=((path,), {}), expected=((), {}))]), to=tmp_path / "pure.yml")
+        with (tmp_path / "pure.yml").open("rb") as f:
+            loaded = yaml.unsafe_load(f).cases[0].inputs[0][0]
+        assert type(loaded) is type(path)
+        assert loaded == path
+        assert loaded.drive == path.drive
+
+    def test_reloaded_module(self, tmp_path, monkeypatch):
+        """Functions from a reloaded module (importlib.reload, IPython autoreload) can be dumped."""
+        (tmp_path / "course_checks.py").write_text("def positive(case, outputs):\n    return None\n")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        course_checks = importlib.import_module("course_checks")
+        monkeypatch.setitem(sys.modules, "course_checks", course_checks)
+        positive = course_checks.positive
+        importlib.reload(course_checks)
+        assert course_checks.positive is not positive
+        dump_subtask(_make_subtask(assertions={positive: ((), {})}), to=tmp_path / "reloaded.yml")
+        with (tmp_path / "reloaded.yml").open("rb") as f:
+            assert yaml.unsafe_load(f).assertions == {course_checks.positive: ((), {})}
+
+
+class TestDumpRound4Regressions:
+    """Regressions found in the fourth review round."""
+
+    def test_redefined_function_is_refused(self, tmp_path, monkeypatch):
+        """A function shadowed by a later definition of the same name is refused (it would load as the other one)."""
+        (tmp_path / "shadowing_checks.py").write_text(
+            "def check(case, outputs):\n    return 'strict'\n\nstrict_check = check\n\ndef check(case, outputs):\n    return 'loose'\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        module = importlib.import_module("shadowing_checks")
+        monkeypatch.setitem(sys.modules, "shadowing_checks", module)
+        with pytest.raises(yaml.representer.RepresenterError):
+            dump_subtask(_make_subtask(assertions={module.strict_check: ((), {})}), to=tmp_path / "shadowed.yml")

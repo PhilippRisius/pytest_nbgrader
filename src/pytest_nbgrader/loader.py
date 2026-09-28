@@ -10,6 +10,7 @@ from __future__ import annotations
 
 __all__ = ["Submission"]
 
+import collections.abc
 import functools
 import importlib.machinery
 import importlib.util
@@ -26,7 +27,7 @@ class Submission:
 
     @functools.singledispatchmethod
     @classmethod
-    def submit(cls, submission: object) -> None:
+    def submit(cls, submission: object) -> object:
         """
         Store a generic submission.
 
@@ -34,9 +35,15 @@ class Submission:
         ----------
         submission : object
             The submission object to store.
+
+        Returns
+        -------
+        object
+            The stored submission.
         """
         print(f"The following submission will be tested:\n\n{submission}")
         cls.submission = submission
+        return cls.submission
 
     @submit.register
     @classmethod
@@ -54,27 +61,35 @@ class Submission:
         types.CodeType
             Compiled bytecode.
         """
+        # a failed submission must not leave the previous one in place
+        cls.submission = None
         print(f"The following submission will be tested:\n\n{cell}")
-        cls.submission = compile(cell, "student solution", "exec")
+        cls.submission = compile(cell, "student solution", "exec", dont_inherit=True)
         return cls.submission
 
-    @submit.register
+    @submit.register(collections.abc.Callable)
+    @submit.register(types.FunctionType)
     @classmethod
-    def _(cls, function: types.FunctionType) -> types.FunctionType:
+    def _(cls, function: collections.abc.Callable) -> collections.abc.Callable:
         """
-        Read a function from the user's scope to be tested.
+        Read a function (or other non-class callable) from the user's scope to be tested.
 
         Parameters
         ----------
-        function : types.FunctionType
+        function : callable
             The function to submit.
 
         Returns
         -------
-        types.FunctionType
+        callable
             The stored function.
         """
-        print(f"The following submission will be tested:\n\n{inspect.getsource(function)}")
+        cls.submission = None
+        try:
+            source = inspect.getsource(inspect.unwrap(function))
+        except (OSError, TypeError):
+            source = repr(function)
+        print(f"The following submission will be tested:\n\n{source}")
         cls.submission = function
         return cls.submission
 
@@ -113,8 +128,16 @@ class Submission:
         -------
         importlib.machinery.ModuleSpec
             The module specification.
+
+        Raises
+        ------
+        ValueError
+            If the file cannot be imported as a Python module.
         """
-        with pathlib.Path(module).open() as file:
-            print(f"The following module will be tested:\n\n{file.read()}")
-        cls.submission = importlib.util.spec_from_file_location(module.stem, module.resolve())
+        cls.submission = None
+        spec = importlib.util.spec_from_file_location(module.stem, module.resolve())
+        if spec is None:
+            raise ValueError(f"{module} cannot be imported as a Python module.")
+        print(f"The following module will be tested:\n\n{module.read_text(encoding='utf-8')}")
+        cls.submission = spec
         return cls.submission

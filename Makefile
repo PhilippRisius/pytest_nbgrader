@@ -82,11 +82,11 @@ servedocs: autodoc ## compile the docs watching for changes
 	sphinx-autobuild docs docs/_build/html
 
 dist: clean ## builds source and wheel package
-	python -m flit build
+	python -m flit build --no-use-vcs
 	ls -l dist
 
-release: dist ## package and upload a release
-	python -m flit publish dist/*
+release: clean ## package and upload a release
+	python -m flit publish --no-use-vcs
 
 install: clean ## install the package to the active Python's site-packages
 	python -m pip install .

@@ -26,7 +26,7 @@ Features
 * Define test cases with expected inputs/outputs using ``TestCase`` and ``TestSubtask`` dataclasses
 * Execute student code against test cases with automatic result comparison
 * Serialize and deserialize test cases via YAML
-* Prerequisite checks: function signature validation, write-access verification
+* Prerequisite checks: function signature validation, stdout/stderr output and file-write checks
 * Assertion helpers for numeric comparisons (numpy-based tolerances)
 * Automatic pytest test class generation via ``TestClass`` harness
 * Run pytest from within notebooks using the ``runner`` module
