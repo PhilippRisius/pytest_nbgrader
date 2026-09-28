@@ -33,7 +33,7 @@ dynamic = ["description", "version"]
 dependencies = [
   "numpy",
   "pytest >=8",
-  "pyyaml"
+  "pyyaml >=5.1"
 ]
 
 [project.entry-points."pytest11"]
