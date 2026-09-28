@@ -240,9 +240,15 @@ override_SS05 = [
 addopts = [
   "-ra",
   "--color=yes",
-  "--verbose"
+  "--verbose",
+  # Unit tests call the plugin hooks directly; not auto-loading the plugin lets coverage measure its import.
+  # End-to-end tests run their own pytest sessions (pytester), which load the plugin as usual.
+  "-p",
+  "no:pytest-nbgrader",
+  "-p",
+  "pytester"
 ]
-filterwarnings = ["ignore::UserWarning"]
+filterwarnings = ["error"]
 testpaths = [
   "tests"
 ]
