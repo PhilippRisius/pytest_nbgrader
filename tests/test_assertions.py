@@ -1108,3 +1108,24 @@ class TestReviewRegressions:
         assert assertions.equal_value.accepts_exceptions is False
         assert assertions.close_attributes.accepts_exceptions is False
         assert getattr(assertions.raises, "accepts_exceptions", True) is True
+
+
+class TestRound3Regressions:
+    """Regressions found in the third review round."""
+
+    @pytest.mark.parametrize("assertion", [assertions.equal_value, assertions.almost_equal])
+    @pytest.mark.parametrize("actual", [(1.5,), (), (1.5, None, None)])
+    def test_output_count_must_match(self, assertion, actual):
+        """Missing or extra outputs fail, even if the missing expected values are None."""
+        case = make_case(expected=((1.5, None), {}))
+        assert assertion(case, (actual, {}, 0.0))[0] is pytest.ExitCode.TESTS_FAILED
+
+    @pytest.mark.parametrize("assertion", [assertions.equal_value, assertions.almost_equal])
+    def test_expected_none_output(self, assertion):
+        """A None output that is expected still passes."""
+        case = make_case(expected=((1.5, None), {}))
+        assert assertion(case, ((1.5, None), {}, 0.0))[0] is pytest.ExitCode.OK
+
+    def test_file_contents_applies_to_raises_cases(self):
+        """file_contents does not look at outputs, so it also checks raises=True cases."""
+        assert getattr(assertions.file_contents, "accepts_exceptions", True) is True

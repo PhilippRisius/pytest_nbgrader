@@ -656,8 +656,11 @@ def almost_equal(case: TestCase, outputs: tuple, *args: str, atol: float = 1e-7,
     if missing:
         return pytest.ExitCode.TESTS_FAILED, f"variables {list(args)} to be defined", f"undefined: {missing}"
 
+    if len(outputs[0]) != len(case.expected[0]):
+        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+
     comparisons = itertools.chain(
-        itertools.zip_longest(outputs[0], case.expected[0]),
+        zip(outputs[0], case.expected[0], strict=True),
         [(outputs[1][key], case.expected[1][key]) for key in args],
     )
 
@@ -763,8 +766,11 @@ def equal_value(case: TestCase, outputs: tuple, *args: str, **kwargs: object) ->
     if missing:
         return pytest.ExitCode.TESTS_FAILED, f"variables {list(args)} to be defined", f"undefined: {missing}"
 
+    if len(outputs[0]) != len(case.expected[0]):
+        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+
     comparisons = itertools.chain(
-        itertools.zip_longest(outputs[0], case.expected[0], fillvalue=None),
+        zip(outputs[0], case.expected[0], strict=True),
         [(outputs[1][key], case.expected[1][key]) for key in args],
     )
 
@@ -879,8 +885,8 @@ def time_bounds(case: TestCase, outputs: tuple, *args: object, **kwargs: object)
 
 
 # In ``raises=True`` cases the harness passes the raised exception as ``outputs``. These assertions
-# compare values and do not apply to exceptions, so the harness does not call them in that case.
-# Custom assertions without this attribute receive the exception.
+# compare outputs and do not apply to exceptions, so the harness does not call them in that case.
+# Custom assertions without this attribute (and file_contents, which ignores outputs) are called.
 for _assertion in (
     almost_equal,
     calls,
@@ -890,7 +896,6 @@ for _assertion in (
     equal_scope,
     equal_types,
     equal_value,
-    file_contents,
     has_import,
     has_method,
     time_bounds,

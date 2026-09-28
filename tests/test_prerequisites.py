@@ -625,3 +625,39 @@ class TestReviewRegressions:
             return r
 
         assert has_signature(module.area, inspect.signature(reference), "annotation") == pytest.ExitCode.TESTS_FAILED
+
+
+class TestRound3Regressions:
+    """Regressions found in the third review round."""
+
+    @pytest.mark.parametrize("alias", ["aa", "latest", "zz"])
+    def test_directory_alias_does_not_hide_real_path(self, tmp_path, monkeypatch, alias):
+        """Files are reported under their real path, whatever a symlink to their directory is called."""
+        workdir = tmp_path / "work"
+        (workdir / "data").mkdir(parents=True)
+        (workdir / alias).symlink_to(workdir / "data")
+        monkeypatch.chdir(workdir)
+        spec = _make_spec(tmp_path, f"alias_writer_{alias}", "import pathlib; pathlib.Path('data/out.txt').write_text('x')")
+        assert writes_file(spec, created={pathlib.Path("data/out.txt")}) == pytest.ExitCode.OK
+
+    def test_comparator_failing_on_strings(self, tmp_path):
+        """A comparator that raises on string annotations is retried with the evaluated annotations."""
+        spec = _make_spec(tmp_path, "postponed_bool", "from __future__ import annotations\n\ndef f(x: bool) -> bool:\n    return x\n")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def ref(x: int) -> int:
+            return x
+
+        assert has_signature(module.f, inspect.signature(ref), annotation=issubclass) == pytest.ExitCode.OK
+
+    def test_comparator_failing_on_both_forms(self):
+        """A comparator that raises on every form is a failure, not a crash."""
+
+        def f(x: int) -> int:
+            return x
+
+        def broken(fun_value, ref_value):
+            raise RuntimeError("broken comparator")
+
+        assert has_signature(f, inspect.signature(f), annotation=broken) == pytest.ExitCode.TESTS_FAILED

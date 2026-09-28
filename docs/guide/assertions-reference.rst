@@ -71,7 +71,8 @@ equal_value
 
 Tests for exact equality between expected and actual outputs.
 
-**Positional outputs** (functions): compares return values element-by-element.
+**Positional outputs** (functions): compares return values element-by-element; missing or extra
+outputs fail.
 
 **Named outputs** (code strings): pass variable names as ``*vars`` to compare specific variables.
 A variable the submission did not define fails the assertion.

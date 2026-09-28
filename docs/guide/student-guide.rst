@@ -84,7 +84,7 @@ courses, this is a **locked cell** (you cannot edit it) that looks something lik
 Just run it. If all tests pass, nothing happens (no error). If a test fails, you will
 see an ``AssertionError`` or a test failure message.
 
-Some courses use a simpler format that shows pass/fail counts:
+Some courses use a shorter format that prints one character per test:
 
 .. code-block:: python
 

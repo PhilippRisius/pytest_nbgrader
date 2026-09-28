@@ -68,8 +68,10 @@ def _snapshot(root: str = ".") -> dict[pathlib.Path, tuple[int, int]]:
     """
     Record size and modification time of all files below ``root``.
 
-    Symlinks are followed (each directory is visited once, so link loops are harmless);
-    ``__pycache__`` directories, written by the import system, are skipped.
+    Directories are walked in sorted order. Symlinks to directories outside ``root`` are followed
+    (each such directory once, so link loops are harmless); symlinks to directories inside ``root``
+    are not, because those are walked through their real path. ``__pycache__`` directories,
+    written by the import system, are skipped.
 
     Parameters
     ----------
@@ -81,6 +83,7 @@ def _snapshot(root: str = ".") -> dict[pathlib.Path, tuple[int, int]]:
     dict
         Mapping of relative file paths to ``(size, mtime_ns)``.
     """
+    real_root = pathlib.Path(root).resolve()
     snapshot = {}
     visited = set()
     for directory, subdirectories, filenames in os.walk(root, followlinks=True):
@@ -89,7 +92,11 @@ def _snapshot(root: str = ".") -> dict[pathlib.Path, tuple[int, int]]:
             subdirectories.clear()
             continue
         visited.add((directory_stat.st_dev, directory_stat.st_ino))
-        subdirectories[:] = [subdirectory for subdirectory in subdirectories if subdirectory != "__pycache__"]
+        subdirectories[:] = sorted(
+            subdirectory
+            for subdirectory in subdirectories
+            if subdirectory != "__pycache__" and not _links_inside(pathlib.Path(directory, subdirectory), real_root)
+        )
         for filename in filenames:
             path = pathlib.Path(directory, filename)
             with contextlib.suppress(OSError):  # e.g. removed while walking
@@ -97,6 +104,25 @@ def _snapshot(root: str = ".") -> dict[pathlib.Path, tuple[int, int]]:
                 stat = path.stat() if path.exists() else path.lstat()
                 snapshot[path] = (stat.st_size, stat.st_mtime_ns)
     return snapshot
+
+
+def _links_inside(path: pathlib.Path, root: pathlib.Path) -> bool:
+    """
+    Tell whether ``path`` is a symlink to a directory inside ``root``.
+
+    Parameters
+    ----------
+    path : pathlib.Path
+        Path to check.
+    root : pathlib.Path
+        Resolved root directory.
+
+    Returns
+    -------
+    bool
+        True for a symlink whose target lies inside ``root``.
+    """
+    return path.is_symlink() and path.resolve().is_relative_to(root)
 
 
 def writes_file(
@@ -390,15 +416,35 @@ def has_signature(
         ``pytest.ExitCode.OK`` if signature matches,
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
+
+    def mismatches(fun_sig: inspect.Signature) -> list[str]:
+        """
+        Compare a signature with the reference; a comparison that raises counts as a mismatch.
+
+        Parameters
+        ----------
+        fun_sig : inspect.Signature
+            Signature of the tested function.
+
+        Returns
+        -------
+        list of str
+            Descriptions of all differences.
+        """
+        try:
+            return _signature_mismatches(fun_sig, ref_sig, strict_comparisons, compare_names, comparisons)
+        except Exception as e:  # noqa: BLE001 - e.g. a custom comparator that cannot handle string annotations
+            return [f"Comparing the signature raised {e!r}"]
+
     raw_sig = inspect.signature(function)
-    problems = _signature_mismatches(raw_sig, ref_sig, strict_comparisons, compare_names, comparisons)
+    problems = mismatches(raw_sig)
     if problems:
         # Postponed (string) annotations: the reference may hold the evaluated types instead.
         try:
             evaluated_sig = inspect.signature(function, eval_str=True)
         except Exception:  # noqa: BLE001 - annotations that cannot be evaluated stay strings
             evaluated_sig = raw_sig
-        if evaluated_sig != raw_sig and not _signature_mismatches(evaluated_sig, ref_sig, strict_comparisons, compare_names, comparisons):
+        if evaluated_sig != raw_sig and not mismatches(evaluated_sig):
             problems = []
 
     for problem in problems:

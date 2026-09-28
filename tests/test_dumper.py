@@ -1,7 +1,9 @@
 """Tests for dumper.py — dump_exercise, dump_task, dump_subtask append mode."""
 
 import functools
+import importlib
 import pathlib
+import sys
 
 import pytest
 import yaml
@@ -137,7 +139,7 @@ class TestDumpRegressions:
 
     def test_paths_are_portable(self, tmp_path):
         """Paths are written as pathlib.Path, which loads on every Python version and OS."""
-        case = TestCase(inputs=((pathlib.PurePosixPath("a/b.txt"),), {}), expected=((), {}))
+        case = TestCase(inputs=((pathlib.Path("a/b.txt"),), {}), expected=((), {}))
         dump_subtask(_make_subtask(cases=[case]), to=tmp_path / "paths.yml")
         text = (tmp_path / "paths.yml").read_text()
         assert "python/object/apply:pathlib.Path" in text
@@ -200,3 +202,30 @@ class TestDumpReviewRegressions:
         with yaml_file.open("rb") as f:
             loaded = yaml.unsafe_load(f)
         assert loaded.assertions == [(equal_value, (("a",), {})), (equal_value, (("b",), {}))]
+
+
+class TestDumpRound3Regressions:
+    """Regressions found in the third review round."""
+
+    @pytest.mark.parametrize("path", [pathlib.PureWindowsPath(r"C:\Users\alice\notes.txt"), pathlib.PurePosixPath("a/b.txt")])
+    def test_pure_paths_keep_their_flavour(self, tmp_path, path):
+        """Pure paths are loaded with their own class (e.g. a Windows drive survives on Linux)."""
+        dump_subtask(_make_subtask(cases=[TestCase(inputs=((path,), {}), expected=((), {}))]), to=tmp_path / "pure.yml")
+        with (tmp_path / "pure.yml").open("rb") as f:
+            loaded = yaml.unsafe_load(f).cases[0].inputs[0][0]
+        assert type(loaded) is type(path)
+        assert loaded == path
+        assert loaded.drive == path.drive
+
+    def test_reloaded_module(self, tmp_path, monkeypatch):
+        """Functions from a reloaded module (importlib.reload, IPython autoreload) can be dumped."""
+        (tmp_path / "course_checks.py").write_text("def positive(case, outputs):\n    return None\n")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        course_checks = importlib.import_module("course_checks")
+        monkeypatch.setitem(sys.modules, "course_checks", course_checks)
+        positive = course_checks.positive
+        importlib.reload(course_checks)
+        assert course_checks.positive is not positive
+        dump_subtask(_make_subtask(assertions={positive: ((), {})}), to=tmp_path / "reloaded.yml")
+        with (tmp_path / "reloaded.yml").open("rb") as f:
+            assert yaml.unsafe_load(f).assertions == {course_checks.positive: ((), {})}

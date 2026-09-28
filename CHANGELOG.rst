@@ -12,13 +12,14 @@ Changes
 * ``equal_attributes`` and ``close_attributes`` compare every object in ``outputs[0]`` with the corresponding object in ``case.expected[0]`` (one per instantiation of a class), and fail if the numbers differ. Previously only the first instance was checked.
 * ``equal_contents`` casts only containers to the expected type; scalars are compared as they are. Missing or extra outputs fail.
 * ``almost_equal`` requires actual and expected values to have the same shape instead of broadcasting.
+* ``equal_value`` and ``almost_equal`` fail if the number of positional outputs differs from the expected one, even if the missing expected values are ``None``.
 * ``raises=True`` cases may be mixed with other cases: the built-in value assertions are not applied to the raised exception. Custom assertions still receive it, unless they set ``accepts_exceptions = False``.
 * ``execute()`` always returns a tuple of positional outputs: a function returning ``None`` with one expected output gives ``(None,)``; with several expected outputs, tuples, lists and numpy arrays hold one output per element, other values (including strings) are one output. Memoized functions, ``functools.partial`` and other callables can be submitted.
 * Code strings run with ``__name__ == "__main__"``; dunder names are not part of the output scope.
 * The harness accepts prerequisites and assertions keyed by a label, ``{"label": (function, (args, kwargs))}``, as documented. Test ids name the assertion and case (``test_assertion[equal_value-0]``).
 * ``runner.main(auto=False)`` runs only the tests passed in ``*args``.
 * ``writes`` and ``writes_file`` accept ``argv``; ``sys.exit(0)`` counts as a normal run.
-* ``dump_subtask`` keeps dict order, merges into the existing subtask with ``append=True``, writes portable ``pathlib.Path`` tags, accepts ``str`` paths, and refuses functions that students cannot import by module and name (lambdas, methods, ``__main__``). Requires PyYAML >= 5.1.
+* ``dump_subtask`` keeps dict order, merges into the existing subtask with ``append=True``, writes paths with public ``pathlib`` classes (portable across Python versions; pure paths keep their flavour), accepts ``str`` paths, and refuses functions that students cannot import by module and name (lambdas, methods, ``__main__``). Requires PyYAML >= 5.1.
 * ``time_bounds`` bounds are inclusive; ``0`` is a bound, not "unbounded".
 * Failure messages name the exit code (``TESTS_FAILED``); ``-v`` shows the full traceback.
 * ``has_signature`` accepts a submission whose raw or evaluated (postponed) annotations match the reference.
@@ -30,7 +31,7 @@ Fixes
 * Fixed correct submissions failing: numpy arrays in ``equal_value``; ``close_attributes`` in the harness; value assertions on ``raises=True`` cases; the documented prerequisites format; ``writes_file`` reporting ``__pycache__`` files and read files; ``sys.exit(0)`` and ``argparse`` scripts in ``writes``; module submissions using dataclasses with postponed annotations; ``dump_subtask`` reordering dict inputs.
 * Fixed crashes: ``format_result`` for class submissions; scalar return values in ``execute()``; ``SystemExit`` from student code breaking later cases; missing variables, attributes and files reported as internal errors; ``has_import`` positional paths.
 * Fixed the plugin warning in every pytest run of unrelated projects, which broke suites using ``-W error``.
-* Fixed ``runner.main`` leaking symlinks after errors or interrupted runs, failing on re-runs from another directory, and rejecting falsy submissions.
+* Fixed ``runner.main`` leaking symlinks after errors, tripping over dangling symlinks left behind in another environment, failing on re-runs from another directory, and rejecting falsy submissions.
 * Fixed ``writes``/``writes_file`` leaving the shared submission renamed when the module raised.
 * Fixed a failed ``Submission.submit()`` keeping the previous submission.
 * Fixed CI linting (unpinned ruff with preview rules), coverage measurement, sdist contents, ``make release``, and several workflow configuration issues.

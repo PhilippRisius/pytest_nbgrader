@@ -53,7 +53,7 @@ def _represent_function(dumper: yaml.Dumper, function: types.FunctionType) -> ya
         except ImportError:
             importable = False
         else:
-            importable = getattr(module, function.__name__, None) is function
+            importable = _same_function(getattr(module, function.__name__, None), function)
     if not importable:
         raise yaml.representer.RepresenterError(
             f"cannot dump {module_name}.{qualname}: functions used in test cases must be defined at the top level of an importable module"
@@ -61,9 +61,38 @@ def _represent_function(dumper: yaml.Dumper, function: types.FunctionType) -> ya
     return dumper.represent_name(function)
 
 
+def _same_function(resolved: object, function: types.FunctionType) -> bool:
+    """
+    Tell whether ``resolved`` is ``function``, or the current version of it after a module reload.
+
+    Parameters
+    ----------
+    resolved : object
+        The object found under the function's module and name.
+    function : types.FunctionType
+        The function to dump.
+
+    Returns
+    -------
+    bool
+        True if loading the dumped name gives this function (or its reloaded definition).
+    """
+    if resolved is function:
+        return True
+    # importlib.reload / IPython autoreload rebind the module attribute to a new function object
+    return (
+        isinstance(resolved, types.FunctionType)
+        and (resolved.__module__, resolved.__qualname__) == (function.__module__, function.__qualname__)
+        and (resolved.__code__.co_filename, resolved.__code__.co_name) == (function.__code__.co_filename, function.__code__.co_name)
+    )
+
+
 def _represent_path(dumper: yaml.Dumper, path: pathlib.PurePath) -> yaml.Node:
     """
-    Represent a path as ``pathlib.Path``, which loads on any Python version and operating system.
+    Represent a path by a public ``pathlib`` class, which loads on any Python version and OS.
+
+    Concrete paths become ``pathlib.Path`` (the concrete class for the loading system); pure paths
+    keep their flavour.
 
     Parameters
     ----------
@@ -75,9 +104,13 @@ def _represent_path(dumper: yaml.Dumper, path: pathlib.PurePath) -> yaml.Node:
     Returns
     -------
     yaml.Node
-        A ``!!python/object/apply:pathlib.Path`` node.
+        A ``!!python/object/apply:pathlib.<class>`` node.
     """
-    return dumper.represent_sequence("tag:yaml.org,2002:python/object/apply:pathlib.Path", [path.as_posix()])
+    if isinstance(path, pathlib.Path):
+        name, argument = "Path", path.as_posix()
+    else:
+        name, argument = ("PureWindowsPath" if isinstance(path, pathlib.PureWindowsPath) else "PurePosixPath"), str(path)
+    return dumper.represent_sequence(f"tag:yaml.org,2002:python/object/apply:pathlib.{name}", [argument])
 
 
 _Dumper.add_representer(types.FunctionType, _represent_function)

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pytest_nbgrader.assertions import equal_value, raises
+from pytest_nbgrader.assertions import equal_value, file_contents, raises
 from pytest_nbgrader.cases import TestCase
 from pytest_nbgrader.harness import TestClass as HarnessClass
 
@@ -263,3 +263,14 @@ class TestReviewRegressions:
         with pytest.raises(pytest.fail.Exception, match="expected a ValueError"):
             HarnessClass().test_assertion((case, ZeroDivisionError("x")), (check_message, ((), {})), verbosity=0)
         assert isinstance(received[0], ZeroDivisionError)
+
+
+class TestRound3Regressions:
+    """Regressions found in the third review round."""
+
+    def test_file_contents_on_raises_case(self, tmp_path, monkeypatch):
+        """A submission that raises without writing the expected file fails file_contents."""
+        monkeypatch.chdir(tmp_path)
+        case = TestCase(inputs=((-1,), {}), expected=((), {"error.log": b"negative\n"}), raises=True)
+        with pytest.raises(pytest.fail.Exception, match="not found"):
+            HarnessClass().test_assertion((case, ValueError("negative")), (file_contents, ((), {})), verbosity=0)
