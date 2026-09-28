@@ -74,6 +74,10 @@ Tests for exact equality between expected and actual outputs.
 **Positional outputs** (functions): compares return values element-by-element.
 
 **Named outputs** (code strings): pass variable names as ``*vars`` to compare specific variables.
+A variable the submission did not define fails the assertion.
+
+Values are compared with ``==``; numpy arrays are equal if they have the same shape and
+elements. Note that ``nan != nan``: use ``almost_equal`` for results that may be NaN.
 
 .. code-block:: python
 
@@ -92,7 +96,8 @@ almost_equal
    almost_equal(case, outputs, *vars, atol=1e-7, rtol=1e-7, **kwargs)
 
 Tests for approximate equality using ``numpy.testing.assert_allclose``.
-Falls back to exact equality for non-numeric types.
+Actual and expected values must have the same shape (no broadcasting: ``0.0`` does not match
+``np.zeros(3)``). Falls back to exact equality for non-numeric types.
 
 **Parameters:**
 
@@ -116,9 +121,10 @@ equal_contents
 
    equal_contents(case, outputs, *vars, **kwargs)
 
-Compares container contents with type coercion — the actual output is cast to the
-expected type before comparison. Useful when students might return a ``list`` where a
-``tuple`` was expected.
+Compares container contents with type coercion — an actual container is cast to the
+expected container type (``list``, ``tuple``, ``set``, ``frozenset``, ``dict``) before
+comparison. Useful when students might return a ``list`` where a ``tuple`` was expected.
+Scalars are compared without any cast, and missing or extra outputs fail.
 
 .. code-block:: python
 
@@ -150,7 +156,8 @@ equal_types
 
    equal_types(case, outputs, *vars, **kwargs)
 
-Tests that the types of named variables match between expected and actual outputs.
+Tests that the named variables are instances of the types of the expected values
+(an ``isinstance`` check: ``True`` passes where an ``int`` is expected, but not vice versa).
 
 .. code-block:: python
 
@@ -167,8 +174,10 @@ raises
 
    raises(case, outputs, *exception_types, **kwargs)
 
-When ``TestCase.raises=True``, the harness catches the exception and passes it as ``outputs``.
-This assertion verifies the exception is an instance of one of the given types.
+When ``TestCase.raises=True``, the harness catches the exception raised by the submission and
+passes it as ``outputs``. This assertion verifies the exception is an instance of one of the
+given types; if the submission does not raise, it fails. Other assertions are not applied to
+the exception, so ``raises=True`` cases can share a subtask with ordinary cases.
 
 .. code-block:: python
 
@@ -184,10 +193,11 @@ file_contents
 
 .. code-block:: python
 
-   file_contents(case, *args, **kwargs)
+   file_contents(case, outputs, *args, **kwargs)
 
 Compares the contents of files listed in ``case.expected[1]`` (a dict mapping filenames to
-expected bytes) against the actual file contents on disk. The comparison is byte-for-byte.
+expected bytes) against the actual file contents on disk. The comparison is byte-for-byte;
+a missing file fails.
 
 .. code-block:: python
 
@@ -208,8 +218,9 @@ time_bounds
 
    time_bounds(case, outputs, *args, **kwargs)
 
-Tests that the execution time (``outputs[2]``) falls within ``case.timing`` bounds.
+Tests that the execution time (``outputs[2]``) falls within ``case.timing`` bounds (inclusive).
 The timing tuple is ``(lower_bound, upper_bound)`` in seconds; use ``None`` for unbounded.
+The time is measured after the call returns; long-running code is not interrupted.
 
 .. code-block:: python
 
@@ -232,7 +243,9 @@ equal_attributes
    equal_attributes(case, outputs, *attrs, **kwargs)
 
 Compares attribute values between expected and actual class instances.
-The expected instance comes from ``case.expected[0][0]``, the actual from ``outputs[0][0]``.
+Each object in ``outputs[0]`` (one per instantiation) is compared with the corresponding
+object in ``case.expected[0]``; a different number of objects, or an attribute missing on the
+actual object, fails.
 
 .. code-block:: python
 
@@ -247,7 +260,8 @@ close_attributes
    close_attributes(case, outputs, *attrs, **kwargs)
 
 Like ``equal_attributes`` but uses ``numpy.testing.assert_allclose`` for comparison.
-Accepts ``atol`` and ``rtol`` keyword arguments.
+Accepts ``atol`` and ``rtol`` keyword arguments. Custom harnesses may pass a bare instance
+as ``outputs``.
 
 .. code-block:: python
 
@@ -292,11 +306,21 @@ This verifies that calling ``obj.main()`` causes ``obj.helper(1, 2)`` to be call
 has_import
 ----------
 
+.. code-block:: python
+
+   has_import(case, outputs, *module_paths, **objects)
+
 .. warning::
 
-   ``has_import`` is experimental and has known compatibility issues.
-   It uses ``case.return_object`` (a dynamic attribute not declared on ``TestCase``)
-   and is not wrapped with the standard ``@_log`` decorator pipeline.
-   Use with caution.
+   ``has_import`` is experimental. Locations are compared as paths relative to the directory
+   pytest runs in, so it only works for modules located there, not for the standard library
+   or installed packages.
 
-Tests whether objects in a module were imported from the correct locations.
+Tests whether objects in a module were imported from the correct locations. Each positional
+``pathlib.Path`` requires ``import <stem>`` of that file; each keyword maps a name defined in
+the module to the path it must be imported from, or ``None`` if it must be defined locally.
+
+.. code-block:: python
+
+   # student module: "import helpers" and "from helpers import area", defines "main" itself
+   assertions = {has_import: ((Path("helpers.py"),), {"area": Path("helpers.py"), "main": None})}

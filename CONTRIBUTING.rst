@@ -202,9 +202,10 @@ To run specific code style checks:
 .. code-block:: console
 
     python -m ruff check src/pytest_nbgrader tests
-    validate-docstrings src/pytest_nbgrader/**.py
+    python -m numpydoc lint src/pytest_nbgrader/*.py
 
-To get ``ruff`` and ``numpydoc`` (for ``validate-docstrings``), simply install them with ``pip`` into your environment.
+or simply ``make lint``. The versions of ``ruff`` and ``numpydoc`` used in CI are pinned in ``tox.ini``
+(``tox -e lint``); keep them in sync with ``.pre-commit-config.yaml``.
 
 Code of Conduct
 ---------------

@@ -95,14 +95,26 @@ Some courses use a simpler format that shows pass/fail counts:
 
 The flags:
 
-- ``-qq``: minimal output (just pass/fail counts)
+- ``-qq``: minimal output (one character per test: ``.`` passed, ``F`` failed, ``E`` error, ``s`` skipped)
 - ``-x``: stop on first failure
 - ``--cases``: path to the YAML test file provided by your instructor
 
 From the Command Line
 ---------------------
 
-If you want to run tests outside the notebook:
+Outside the notebook, a fresh pytest process has no submission. Submit your solution from a
+``conftest.py`` in the directory where you run pytest, e.g. for a function ``add`` in
+``solution.py``:
+
+.. code-block:: python
+
+   # conftest.py
+   from pytest_nbgrader.loader import Submission
+   from solution import add
+
+   Submission.submit(add)
+
+Then run:
 
 .. code-block:: console
 
@@ -117,9 +129,10 @@ Passing Tests
 
 .. code-block:: text
 
-   2 passed
+   s..
 
-All test cases matched the expected output.
+Each ``.`` is a test case that matched the expected output (with ``-q``: ``2 passed, 1 skipped``).
+A skipped test (``s``) is normal: it is the prerequisites check of a subtask that has none.
 
 Failing Tests
 -------------
@@ -128,19 +141,20 @@ When a test fails, pytest shows what was expected vs. what your code produced:
 
 .. code-block:: text
 
-   FAILED test_assertion[equal_value-0]
-     Test case failed:
-     2, 3
-     The following message was passed:
-     Assertion "equal_value" failed with result 2.
-     Expected: ((5,), {}),
-     Actual: ((6,), {}).
+   ___________________ TestClass.test_assertion[equal_value-0] ____________________
+   Test case failed:
+   2, 3
+   The following message was passed:
+   Assertion "equal_value" failed with result TESTS_FAILED.
+   Expected: ((5,), {}),
+   Actual: ((6,), {}, 8.1e-06).
 
 This tells you:
 
+- **Which check failed**: ``equal_value`` on test case ``0`` (the first case)
 - **Test case inputs**: ``2, 3``
 - **Expected output**: ``(5,)`` — the correct return value
-- **Actual output**: ``(6,)`` — what your function returned
+- **Actual output**: ``(6,)`` — what your function returned (followed by the execution time in seconds)
 
 Errors
 ------
@@ -154,17 +168,21 @@ If your code raises an unexpected exception, the output says:
    The following exception was raised:
    ...
 
-Check the traceback to find the bug in your code.
+Check the traceback to find the bug in your code. By default only the innermost frame is
+shown; run pytest with ``-v`` to see the full traceback.
 
 
 Common Issues
 =============
 
-"No data for automatic tests found"
+"pytest-nbgrader: cannot load test cases from ..."
    The ``--cases`` path doesn't point to a valid YAML file.
    Check the file path — it's relative to where pytest runs (usually the notebook directory).
 
-"Submission is None"
+"No data for automatic tests found"
+   The tests ran without ``--cases``. Check the test cell's arguments.
+
+"pytest-nbgrader: no submission found"
    You forgot to call ``Submission.submit()`` before running the tests.
    Go back and run the submission cell first.
 

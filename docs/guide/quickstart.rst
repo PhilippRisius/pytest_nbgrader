@@ -87,11 +87,15 @@ In the next cell, run pytest with the ``--cases`` flag pointing to the YAML file
        "--cases", "tests/Addition/basic.yml",
    ])
 
-If the solution is correct, the output shows:
+If the solution is correct, the output shows one character per test (``-qq`` suppresses the summary):
 
 .. code-block:: text
 
-   2 passed
+   s..
+
+Each ``.`` is a passed test case; the ``s`` is the prerequisites check, skipped because this
+subtask has no prerequisites. With ``-q`` instead of ``-qq``, pytest also prints the counts
+(``2 passed, 1 skipped``). ``pytest.main()`` returns ``pytest.ExitCode.OK`` if all tests passed.
 
 If a test fails, pytest reports which case failed and what was expected vs. actual.
 
@@ -105,11 +109,11 @@ pytest-nbgrader has three stages: **submit**, **execute**, and **assert**.
 
    Student code                  YAML file                    pytest output
    ─────────────                 ─────────                    ─────────────
-   def add(a, b):    submit()   tests/Addition/basic.yml     2 passed
+   def add(a, b):    submit()   tests/Addition/basic.yml     2 passed, 1 skipped
        return a + b  ────────►  (TestSubtask with cases)  ──────────────►
                                                     │
                                              for each case:
-                                               execute(case, submission)
+                                               execute(submission, case)
                                                     │
                                              for each assertion:
                                                assertion(case, outputs)

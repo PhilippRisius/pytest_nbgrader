@@ -2,19 +2,37 @@
 Changelog
 =========
 
-..
-    `Unreleased <https://github.com/PhilippRisius/pytest_nbgrader>`_ (latest)
-    -------------------------------------------------------------------------
+`Unreleased <https://github.com/PhilippRisius/pytest_nbgrader>`_ (latest)
+-------------------------------------------------------------------------
 
-    Contributors:
+Contributors: Philipp Emmo Tobias Risius (:user:`PhilippRisius`)
 
-    Changes
-    ^^^^^^^
-    * No change.
+Changes
+^^^^^^^
+* ``equal_attributes`` and ``close_attributes`` compare every object in ``outputs[0]`` with the corresponding object in ``case.expected[0]`` (one per instantiation of a class), and fail if the numbers differ. Previously only the first instance was checked.
+* ``equal_contents`` casts only containers to the expected type; scalars are compared as they are. Missing or extra outputs fail.
+* ``almost_equal`` requires actual and expected values to have the same shape instead of broadcasting.
+* ``raises=True`` cases may be mixed with other cases: assertions other than ``raises`` are not applied to the raised exception.
+* ``execute()`` always returns a tuple of positional outputs: a function returning ``None`` with one expected output gives ``(None,)``, lists count as multiple outputs, other values (including strings) as one. Memoized functions, ``functools.partial`` and other callables can be submitted.
+* Code strings run with ``__name__ == "__main__"``; dunder names are not part of the output scope.
+* The harness accepts prerequisites and assertions keyed by a label, ``{"label": (function, (args, kwargs))}``, as documented. Test ids name the assertion and case (``test_assertion[equal_value-0]``).
+* ``runner.main(auto=False)`` runs only the tests passed in ``*args``.
+* ``writes`` and ``writes_file`` accept ``argv``; ``sys.exit(0)`` counts as a normal run.
+* ``dump_subtask`` keeps dict order, merges into the existing subtask with ``append=True``, writes portable ``pathlib.Path`` tags, accepts ``str`` paths, and refuses functions that students cannot import (lambdas, ``__main__``). Requires PyYAML >= 5.1.
+* ``time_bounds`` bounds are inclusive; ``0`` is a bound, not "unbounded".
+* Failure messages name the exit code (``TESTS_FAILED``); ``-v`` shows the full traceback.
+* Configuration errors (missing or invalid ``--cases`` file, subtask without cases or assertions, no submission) are reported as such.
 
-    Fixes
-    ^^^^^
-    * No change.
+Fixes
+^^^^^
+* Fixed false passes: ``equal_contents`` for functions returning nothing or too few values; ``raises`` counting the plugin's own errors as the expected exception; ``almost_equal`` for wrong-shaped answers; ``equal_attributes`` for wrong later instances and misspelled attributes; subtasks without cases or assertions.
+* Fixed correct submissions failing: numpy arrays in ``equal_value``; ``close_attributes`` in the harness; value assertions on ``raises=True`` cases; the documented prerequisites format; ``writes_file`` reporting ``__pycache__`` files and read files; ``sys.exit(0)`` and ``argparse`` scripts in ``writes``; module submissions using dataclasses with postponed annotations; ``dump_subtask`` reordering dict inputs.
+* Fixed crashes: ``format_result`` for class submissions; scalar return values in ``execute()``; ``SystemExit`` from student code breaking later cases; missing variables, attributes and files reported as internal errors; ``has_import`` positional paths.
+* Fixed the plugin warning in every pytest run of unrelated projects, which broke suites using ``-W error``.
+* Fixed ``runner.main`` leaking symlinks after errors or interrupted runs, failing on re-runs from another directory, and rejecting falsy submissions.
+* Fixed ``writes``/``writes_file`` leaving the shared submission renamed when the module raised.
+* Fixed a failed ``Submission.submit()`` keeping the previous submission.
+* Fixed CI linting (unpinned ruff with preview rules), coverage measurement, sdist contents, ``make release``, and several workflow configuration issues.
 
 .. _changes_0.3.0:
 
