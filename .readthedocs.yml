@@ -17,7 +17,6 @@ build:
   jobs:
     pre_build:
       - sphinx-apidoc -o docs/apidoc --private --module-first src/pytest_nbgrader
-      - sphinx-build -M gettext docs docs/_build
 
 conda:
   environment: environment-docs.yml
@@ -27,4 +26,4 @@ python:
     - method: pip
       path: .
       extra_requirements:
-        - dev
+        - docs
