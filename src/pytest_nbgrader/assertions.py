@@ -37,9 +37,11 @@ __all__ = [
 
 import functools
 import inspect
+import itertools
 import logging
 import pathlib
 import types
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -52,6 +54,172 @@ from pytest_nbgrader.cases import TestCase
 _AssertionResult = pytest.ExitCode | tuple[pytest.ExitCode, Any, Any]
 
 _SENTINEL = object()
+
+_VisibleDeprecationWarning = getattr(np, "exceptions", np).VisibleDeprecationWarning
+
+
+def _equal(actual: object, expected: object) -> bool:
+    """
+    Compare two values for exact equality, including numpy arrays.
+
+    Parameters
+    ----------
+    actual : object
+        Value produced by the submission.
+    expected : object
+        Expected value.
+
+    Returns
+    -------
+    bool
+        True if the values are equal.
+    """
+    if isinstance(actual, np.ndarray) or isinstance(expected, np.ndarray):
+        try:
+            return bool(np.array_equal(actual, expected))
+        except (TypeError, ValueError):
+            return False
+    try:
+        return bool(actual == expected)
+    except (TypeError, ValueError):
+        # e.g. containers holding numpy arrays, whose == is element-wise
+        try:
+            np.testing.assert_equal(actual, expected)
+        except (AssertionError, TypeError, ValueError):
+            return False
+        return True
+
+
+def _close(actual: object, expected: object, **tolerances: float) -> bool:
+    """
+    Compare two values for closeness, falling back to exact equality for non-numeric values.
+
+    Parameters
+    ----------
+    actual : object
+        Value produced by the submission.
+    expected : object
+        Expected value.
+    **tolerances : float
+        Tolerances forwarded to ``np.testing.assert_allclose``.
+
+    Returns
+    -------
+    bool
+        True if the values have the same shape and are equal up to tolerance.
+    """
+    try:
+        with warnings.catch_warnings():
+            # numpy < 1.24 warns about ragged sequences instead of raising ValueError
+            warnings.simplefilter("ignore", _VisibleDeprecationWarning)
+            # assert_allclose broadcasts, so e.g. a scalar would match any array of that value
+            if np.shape(actual) != np.shape(expected):
+                return False
+            np.testing.assert_allclose(actual, expected, **tolerances)
+    except AssertionError:
+        return False
+    except (TypeError, ValueError):
+        logging.info("Cannot test %r and %r for near equality, testing for exact equality instead.", actual, expected)
+        return _equal(actual, expected)
+    return True
+
+
+def _is_harness_output(outputs: object) -> bool:
+    """
+    Tell whether outputs have the ``(positional, named, elapsed)`` shape produced by ``execute``.
+
+    Parameters
+    ----------
+    outputs : object
+        Outputs passed to an assertion.
+
+    Returns
+    -------
+    bool
+        True for harness-shaped outputs.
+    """
+    return isinstance(outputs, tuple) and len(outputs) == 3 and isinstance(outputs[0], tuple) and isinstance(outputs[1], dict)
+
+
+def _object_pairs(case: TestCase, outputs: object) -> list[tuple[object, object]]:
+    """
+    Pair each actual object with its expected counterpart.
+
+    Harness-shaped outputs and ``(args, kwargs)``-shaped expectations are unpacked; bare objects
+    (as passed by custom harnesses) are used as they are. Missing objects on either side are
+    represented by a sentinel.
+
+    Parameters
+    ----------
+    case : TestCase
+        Test case with expected outputs.
+    outputs : object
+        Actual outputs, or a bare actual object.
+
+    Returns
+    -------
+    list of tuple
+        ``(actual, expected)`` pairs.
+    """
+    expected = case.expected
+    if isinstance(expected, tuple) and len(expected) == 2 and isinstance(expected[0], tuple) and isinstance(expected[1], dict):
+        expected_objects = expected[0]
+    else:
+        expected_objects = (expected,)
+    actual_objects = outputs[0] if _is_harness_output(outputs) else (outputs,)
+    return list(itertools.zip_longest(actual_objects, expected_objects, fillvalue=_SENTINEL))
+
+
+def _undefined(outputs: tuple, names: tuple[str, ...]) -> list[str]:
+    """
+    List the named outputs that the submission did not define.
+
+    Parameters
+    ----------
+    outputs : tuple
+        Actual outputs ``(positional, named, elapsed)``.
+    names : tuple of str
+        Names that are compared.
+
+    Returns
+    -------
+    list of str
+        Names missing from ``outputs[1]``.
+    """
+    return [name for name in names if name not in outputs[1]]
+
+
+_CONTAINER_TYPES = (dict, frozenset, set, list, tuple)
+
+
+def _contents_equal(actual: object, expected: object) -> bool:
+    """
+    Compare container contents, casting the actual container to the expected container type.
+
+    Parameters
+    ----------
+    actual : object
+        Value produced by the submission.
+    expected : object
+        Expected value.
+
+    Returns
+    -------
+    bool
+        True if the contents are equal. Scalars are compared without any cast.
+    """
+    if isinstance(expected, np.ndarray):
+        try:
+            return bool(np.array_equal(np.asarray(actual), expected))
+        except (TypeError, ValueError):
+            return False
+    container_type = next((t for t in _CONTAINER_TYPES if isinstance(expected, t)), None)
+    if container_type is not None and not isinstance(actual, (str, bytes)):
+        try:
+            actual, expected = container_type(actual), container_type(expected)
+        except (TypeError, ValueError):
+            return False
+    return _equal(actual, expected)
 
 
 def _log(
@@ -101,8 +269,11 @@ def _log(
             logging.debug("%s succeeded:\nExpected: %s\nActual: %s\n", name, case.expected, outputs)
             message = ""
         else:
-            result, expect, actual = result
-            message = f"{name} failed with result {result}.\nExpected: {expect},\nActual: {actual}.\n"
+            if isinstance(result, pytest.ExitCode):
+                result, expect, actual = result, case.expected, outputs
+            else:
+                result, expect, actual = result
+            message = f"{name} failed with result {getattr(result, 'name', result)}.\nExpected: {expect},\nActual: {actual}.\n"
 
         return result, message
 
@@ -114,12 +285,16 @@ def close_attributes(case: TestCase, outputs: object, *args: str, **kwargs: floa
     """
     Assert close values for given attributes between expected and outputs.
 
+    Like ``equal_attributes``, every object in ``outputs[0]`` is compared with the
+    corresponding object in ``case.expected[0]``. Bare objects (as passed by custom
+    harnesses) are accepted as well.
+
     Parameters
     ----------
     case : TestCase
         Test case with expected outputs.
     outputs : object
-        Actual output object whose attributes are compared.
+        Actual outputs ``(positional, named, elapsed)``, or a bare object whose attributes are compared.
     *args : str
         Attribute names to compare.
     **kwargs : dict
@@ -130,12 +305,18 @@ def close_attributes(case: TestCase, outputs: object, *args: str, **kwargs: floa
     Enum
         ``pytest.ExitCode.OK`` on success, or a failure tuple.
     """
-    try:
-        expected_attrs, output_attrs = ([getattr(instance, attribute) for attribute in args] for instance in (case.expected, outputs))
-        np.testing.assert_allclose(expected_attrs, output_attrs, **kwargs)
-        return pytest.ExitCode.OK
-    except AssertionError:
+    pairs = _object_pairs(case, outputs)
+    if not pairs or any(actual is _SENTINEL or expected is _SENTINEL for actual, expected in pairs):
         return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+
+    for actual, expected in pairs:
+        for attribute in args:
+            try:
+                if not _close(getattr(actual, attribute), getattr(expected, attribute), **kwargs):
+                    return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+            except AttributeError:
+                return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+    return pytest.ExitCode.OK
 
 
 @_log
@@ -151,7 +332,7 @@ def has_import(case: TestCase, outputs: tuple, *args: pathlib.Path, **kwargs: pa
         Actual outputs ``(positional, named, elapsed)`` from student submission.
         The return object is taken from ``outputs[0][0]``.
     *args : pathlib.Path
-        Expected import paths to check (positional).
+        Paths of modules that must be imported (``import <stem>``) from exactly that location.
     **kwargs : pathlib.Path or None
         Mapping of object names to expected import paths (None = locally defined).
 
@@ -212,8 +393,9 @@ def has_import(case: TestCase, outputs: tuple, *args: pathlib.Path, **kwargs: pa
     return_obj = outputs[0][0]
     result = None
 
-    for expected in args:
-        actual = inspect.getmodule(getattr(return_obj, expected))
+    for expected in map(pathlib.Path, args):
+        imported = getattr(return_obj, expected.stem, None)
+        actual = inspect.getmodule(imported) if imported is not None else None
         if actual is None:
             logging.warning(invalid_import(expected.stem, expected, "not imported"))
             result = (
@@ -232,7 +414,16 @@ def has_import(case: TestCase, outputs: tuple, *args: pathlib.Path, **kwargs: pa
                 )
 
     for obj, expected in kwargs.items():
-        actual = inspect.getmodule(getattr(return_obj, obj))
+        value = getattr(return_obj, obj, _SENTINEL)
+        if value is _SENTINEL:
+            logging.warning("%s is not defined.", obj)
+            result = (
+                pytest.ExitCode.TESTS_FAILED,
+                expected or "locally defined",
+                "not defined",
+            )
+            continue
+        actual = inspect.getmodule(value)
         if actual is not None:
             actual_origin = _resolve_origin(actual)
             if expected is None:
@@ -267,7 +458,7 @@ def has_import(case: TestCase, outputs: tuple, *args: pathlib.Path, **kwargs: pa
 @_log
 def equal_attributes(case: TestCase, outputs: tuple, *args: str, **kwargs: object) -> _AssertionResult:
     """
-    Test if all attributes of expected and actual return object are equal.
+    Test if all attributes of expected and actual return objects are equal.
 
     Parameters
     ----------
@@ -275,8 +466,8 @@ def equal_attributes(case: TestCase, outputs: tuple, *args: str, **kwargs: objec
         Test case with expected outputs.
     outputs : tuple
         Actual outputs ``(positional, named, elapsed)`` from student submission.
-        The return object is taken from ``outputs[0][0]``; the expected object
-        from ``case.expected[0][0]``.
+        Every object in ``outputs[0]`` (e.g. one per instantiation of a class) is
+        compared with the corresponding object in ``case.expected[0]``.
     *args : str
         Attribute names to compare.
     **kwargs : dict
@@ -287,14 +478,14 @@ def equal_attributes(case: TestCase, outputs: tuple, *args: str, **kwargs: objec
     Enum
         ``pytest.ExitCode.OK`` if equal, otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    if not outputs[0]:
+    pairs = _object_pairs(case, outputs)
+    if not pairs or any(actual is _SENTINEL or expected is _SENTINEL for actual, expected in pairs):
         return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
 
-    return_obj = outputs[0][0]
-    expected_obj = case.expected[0][0]
-
-    if not all(getattr(return_obj, attr, _SENTINEL) == getattr(expected_obj, attr, _SENTINEL) for attr in args):
-        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
+    for actual, expected in pairs:
+        for attr in args:
+            if not hasattr(actual, attr) or not _equal(getattr(actual, attr), getattr(expected, attr, _SENTINEL)):
+                return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
 
     return pytest.ExitCode.OK
 
@@ -331,7 +522,9 @@ def has_method(case: TestCase, outputs: tuple, *args: str, **kwargs: type) -> _A
         return pytest.ExitCode.TESTS_FAILED, args, missing
 
     wrong_types = {
-        attr: type(getattr(return_obj, attr)) for attr, type_hint in kwargs.items() if not isinstance(getattr(return_obj, attr, None), type_hint)
+        attr: type(getattr(return_obj, attr, None))
+        for attr, type_hint in kwargs.items()
+        if not isinstance(getattr(return_obj, attr, None), type_hint)
     }
     if wrong_types:
         return pytest.ExitCode.TESTS_FAILED, kwargs, wrong_types
@@ -371,6 +564,10 @@ def calls(case: TestCase, outputs: tuple, caller: str, **callees: list[tuple[tup
     if not isinstance(obj, (type, types.ModuleType)):
         return pytest.ExitCode.TESTS_FAILED, "type or module", type(obj).__name__
 
+    missing = [name for name in (caller, *callees) if not hasattr(obj, name)]
+    if missing:
+        return pytest.ExitCode.TESTS_FAILED, [caller, *callees], f"missing: {missing}"
+
     result = None
 
     with ExitStack() as stack:
@@ -394,6 +591,9 @@ def equal_contents(case: TestCase, outputs: tuple, *args: str, **kwargs: object)
     """
     Test if containers have equal contents between actual and expected outputs.
 
+    Actual containers are cast to the expected container type (e.g. a list where a tuple
+    was expected) before comparing. Missing or extra outputs fail.
+
     Parameters
     ----------
     case : TestCase
@@ -411,29 +611,20 @@ def equal_contents(case: TestCase, outputs: tuple, *args: str, **kwargs: object)
         ``pytest.ExitCode.OK`` if all pairs of containers have equal contents,
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    # TODO: Collect unequal results in a sensible manner.
-    # Upon completion, return (code, expected, actual)
+    missing = _undefined(outputs, args)
+    if missing:
+        return pytest.ExitCode.TESTS_FAILED, f"variables {list(args)} to be defined", f"undefined: {missing}"
 
-    result = None
-
-    expected_args_types = [type(arg) for arg in case.expected[0]]
-    expected_kwargs_types = [type(case.expected[1][key]) for key in args]
-
-    if any(t(outputs[1][key]) != case.expected[1][key] for key, t in zip(args, expected_kwargs_types)):
+    if any(not _contents_equal(outputs[1][key], case.expected[1][key]) for key in args):
         wrong_outputs = {x: outputs[1][x] for x in outputs[1] if x in case.expected[1]}
-        result = (
-            pytest.ExitCode.TESTS_FAILED,
-            case.expected[1],
-            wrong_outputs,
-        )
-    if any(t(value) != expected for t, value, expected in zip(expected_args_types, outputs[0], case.expected[0])):
-        result = (
-            pytest.ExitCode.TESTS_FAILED,
-            case.expected[0],
-            outputs[0],
-        )
+        return pytest.ExitCode.TESTS_FAILED, case.expected[1], wrong_outputs
 
-    return result or pytest.ExitCode.OK
+    if len(outputs[0]) != len(case.expected[0]) or any(
+        not _contents_equal(value, expected) for value, expected in zip(outputs[0], case.expected[0], strict=True)
+    ):
+        return pytest.ExitCode.TESTS_FAILED, case.expected[0], outputs[0]
+
+    return pytest.ExitCode.OK
 
 
 @_log
@@ -462,33 +653,19 @@ def almost_equal(case: TestCase, outputs: tuple, *args: str, atol: float = 1e-7,
         ``pytest.ExitCode.OK`` if all values are equal up to tolerance,
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    import itertools
-
-    result = None
+    missing = _undefined(outputs, args)
+    if missing:
+        return pytest.ExitCode.TESTS_FAILED, f"variables {list(args)} to be defined", f"undefined: {missing}"
 
     comparisons = itertools.chain(
-        enumerate(itertools.zip_longest(outputs[0], case.expected[0])),
-        [(key, (outputs[1][key], case.expected[1][key])) for key in args],
+        itertools.zip_longest(outputs[0], case.expected[0]),
+        [(outputs[1][key], case.expected[1][key]) for key in args],
     )
 
-    for index, (output, expect) in comparisons:
-        try:
-            np.testing.assert_allclose(output, expect, atol=atol, rtol=rtol)
+    if not all(_close(output, expect, atol=atol, rtol=rtol) for output, expect in comparisons):
+        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
 
-        except TypeError:
-            logging.info(
-                "Cannot test item %s for near equality.\n output = %s, expect = %s\nTesting for strict equality instead.",
-                index,
-                output,
-                expect,
-            )
-            if expect != output:
-                result = (pytest.ExitCode.TESTS_FAILED, case.expected, outputs)
-
-        except AssertionError:
-            result = (pytest.ExitCode.TESTS_FAILED, case.expected, outputs)
-
-    return result or pytest.ExitCode.OK
+    return pytest.ExitCode.OK
 
 
 @_log
@@ -521,6 +698,10 @@ def raises(case: TestCase, outputs: tuple | Exception, *args: type[Exception], *
     return result or pytest.ExitCode.OK
 
 
+# The harness passes exceptions raised in ``raises=True`` cases only to assertions that accept them.
+raises.accepts_exceptions = True  # type: ignore[attr-defined]
+
+
 @_log
 def file_contents(case: TestCase, outputs: tuple, *args: object, **kwargs: object) -> _AssertionResult:
     """
@@ -546,14 +727,17 @@ def file_contents(case: TestCase, outputs: tuple, *args: object, **kwargs: objec
     result = None
 
     for filename, contents in case.expected[1].items():
-        with pathlib.Path(filename).open("rb") as file:
-            actual_contents = file.read()
-            if actual_contents != contents:
-                result = (
-                    pytest.ExitCode.TESTS_FAILED,
-                    contents,
-                    actual_contents,
-                )
+        try:
+            actual_contents = pathlib.Path(filename).read_bytes()
+        except FileNotFoundError:
+            result = (pytest.ExitCode.TESTS_FAILED, contents, f"{filename} not found")
+            continue
+        if actual_contents != contents:
+            result = (
+                pytest.ExitCode.TESTS_FAILED,
+                contents,
+                actual_contents,
+            )
 
     return result or pytest.ExitCode.OK
 
@@ -580,19 +764,19 @@ def equal_value(case: TestCase, outputs: tuple, *args: str, **kwargs: object) ->
         ``pytest.ExitCode.OK`` if all values are exactly equal,
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
-    result = None
-    import itertools
+    missing = _undefined(outputs, args)
+    if missing:
+        return pytest.ExitCode.TESTS_FAILED, f"variables {list(args)} to be defined", f"undefined: {missing}"
 
-    # TODO: Return expected and actual outputs in a sensible manner.
     comparisons = itertools.chain(
         itertools.zip_longest(outputs[0], case.expected[0], fillvalue=None),
         [(outputs[1][key], case.expected[1][key]) for key in args],
     )
 
-    if any(output != expect for output, expect in comparisons):
-        result = (pytest.ExitCode.TESTS_FAILED, case.expected, outputs)
+    if not all(_equal(output, expect) for output, expect in comparisons):
+        return pytest.ExitCode.TESTS_FAILED, case.expected, outputs
 
-    return result or pytest.ExitCode.OK
+    return pytest.ExitCode.OK
 
 
 @_log
@@ -618,6 +802,10 @@ def equal_types(case: TestCase, outputs: tuple, *args: str, **kwargs: object) ->
         otherwise ``pytest.ExitCode.TESTS_FAILED``.
     """
     result = None
+
+    missing = _undefined(outputs, args)
+    if missing:
+        return pytest.ExitCode.TESTS_FAILED, f"variables {list(args)} to be defined", f"undefined: {missing}"
 
     if not all(isinstance(outputs[1][key], type(case.expected[1][key])) for key in args):
         actual_types = {key: type(outputs[1][key]) for key in args}
@@ -683,8 +871,9 @@ def time_bounds(case: TestCase, outputs: tuple, *args: object, **kwargs: object)
     """
     result = None
     execution_time = outputs[2]
+    lower, upper = case.timing
 
-    if not (case.timing[0] or 0) < execution_time < (case.timing[1] or 2 * execution_time):
+    if not ((lower is None or execution_time >= lower) and (upper is None or execution_time <= upper)):
         result = (
             pytest.ExitCode.TESTS_FAILED,
             f"in {case.timing}",

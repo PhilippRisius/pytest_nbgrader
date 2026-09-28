@@ -1,5 +1,6 @@
 """Tests for the assertions module."""
 
+import importlib.util
 import pathlib
 
 import numpy as np
@@ -767,4 +768,298 @@ class TestCalls:
         case = make_case()
         outputs = (("just a string",), {}, 0.1)
         result, _ = assertions.calls(case, outputs, "main", helper=[])
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+
+# ---------------------------------------------------------------------------
+# Regressions: harness-shaped data, numpy, missing outputs
+# ---------------------------------------------------------------------------
+
+
+class TestLogResults:
+    """Failure messages and bare exit codes."""
+
+    def test_bare_exit_code(self):
+        """A bare non-OK exit code is reported instead of crashing the wrapper."""
+
+        @_log
+        def bare(case, outputs, *args, **kwargs):
+            return pytest.ExitCode.TESTS_FAILED
+
+        result, message = bare(make_case(), ((), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+        assert "TESTS_FAILED" in message
+
+    def test_message_names_result(self):
+        """The message names the exit code instead of its integer value."""
+        result, message = assertions.equal_value(make_case(expected=((1,), {})), ((2,), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+        assert "failed with result TESTS_FAILED" in message
+
+
+class TestEqualValueRegressions:
+    """equal_value with numpy arrays and missing names."""
+
+    def test_numpy_array_match(self):
+        """Equal arrays pass instead of raising 'truth value is ambiguous'."""
+        case = make_case(expected=((np.arange(3),), {}))
+        result, _ = assertions.equal_value(case, ((np.arange(3),), {}, 0.0))
+        assert result is pytest.ExitCode.OK
+
+    def test_numpy_array_mismatch(self):
+        """Different arrays fail."""
+        case = make_case(expected=((np.arange(3),), {}))
+        result, _ = assertions.equal_value(case, ((np.arange(1, 4),), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_numpy_array_shape_mismatch(self):
+        """Arrays of a different shape fail instead of raising a broadcast error."""
+        case = make_case(expected=((np.arange(3),), {}))
+        result, _ = assertions.equal_value(case, ((np.arange(4),), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_list_of_arrays(self):
+        """Containers holding arrays are compared element-wise."""
+        case = make_case(expected=(([np.zeros(2), np.ones(2)],), {}))
+        result, _ = assertions.equal_value(case, (([np.zeros(2), np.ones(2)],), {}, 0.0))
+        assert result is pytest.ExitCode.OK
+
+    def test_missing_name_fails(self):
+        """A variable the student did not define is a failure, not an internal error."""
+        case = make_case(expected=((), {"b": 1}))
+        result, message = assertions.equal_value(case, ((), {"a": 1}, 0.0), "b")
+        assert result is pytest.ExitCode.TESTS_FAILED
+        assert "undefined" in message
+
+
+class TestAlmostEqualRegressions:
+    """almost_equal shape checks and fallbacks."""
+
+    @pytest.mark.parametrize(
+        ("expected", "actual"),
+        [
+            (np.zeros(3), 0.0),
+            ([], 42),
+            (2.5, [2.5]),
+            ([[1.0, 2.0]], [1.0, 2.0]),
+        ],
+    )
+    def test_broadcasting_does_not_pass(self, expected, actual):
+        """Wrong-shaped answers fail although assert_allclose would broadcast them."""
+        case = make_case(expected=((expected,), {}))
+        result, _ = assertions.almost_equal(case, ((actual,), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_same_shape_different_container(self):
+        """A list where a tuple was expected still passes."""
+        case = make_case(expected=(((1.0, 2.0),), {}))
+        result, _ = assertions.almost_equal(case, (([1.0, 2.0 + 1e-9],), {}, 0.0))
+        assert result is pytest.ExitCode.OK
+
+    def test_ragged_falls_back_to_equality(self):
+        """Ragged values are compared exactly instead of raising."""
+        case = make_case(expected=(([1.0, [2.0, 3.0]],), {}))
+        result, _ = assertions.almost_equal(case, (([1.0, [2.0, 3.0]],), {}, 0.0))
+        assert result is pytest.ExitCode.OK
+
+    @pytest.mark.parametrize("actual", [None, "text"])
+    def test_array_expected_non_numeric_actual(self, actual):
+        """Non-numeric answers for an array fail cleanly."""
+        case = make_case(expected=((np.arange(3.0),), {}))
+        result, _ = assertions.almost_equal(case, ((actual,), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_missing_name_fails(self):
+        """A variable the student did not define is a failure."""
+        case = make_case(expected=((), {"x": 1.0}))
+        result, _ = assertions.almost_equal(case, ((), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+
+class TestEqualContentsRegressions:
+    """equal_contents with missing, extra and scalar outputs."""
+
+    def test_no_return_value_fails(self):
+        """A function returning nothing does not pass."""
+        case = make_case(expected=(([0, 1, 2],), {}))
+        result, _ = assertions.equal_contents(case, ((), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_fewer_outputs_fail(self):
+        """Missing positional outputs fail."""
+        case = make_case(expected=((1, 2), {}))
+        result, _ = assertions.equal_contents(case, ((1,), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_extra_outputs_fail(self):
+        """Extra positional outputs fail."""
+        case = make_case(expected=((1, 2), {}))
+        result, _ = assertions.equal_contents(case, ((1, 2, 3), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    @pytest.mark.parametrize(("expected", "actual"), [(3, 3.9), (3, "3"), (True, "False")])
+    def test_scalars_are_not_cast(self, expected, actual):
+        """Scalars are compared as they are, so wrong answers are not cast into right ones."""
+        case = make_case(expected=((expected,), {}))
+        result, _ = assertions.equal_contents(case, ((actual,), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_container_is_cast(self):
+        """Containers are still compared by contents (list where a tuple was expected)."""
+        case = make_case(expected=(((1, 2),), {"s": {1, 2}}))
+        result, _ = assertions.equal_contents(case, (([1, 2],), {"s": [2, 1, 1]}, 0.0), "s")
+        assert result is pytest.ExitCode.OK
+
+    def test_uncastable_output_fails(self):
+        """An output that cannot be cast to the expected container fails cleanly."""
+        case = make_case(expected=(([1, 2],), {}))
+        result, _ = assertions.equal_contents(case, ((5,), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_numpy_array(self):
+        """Arrays compare by contents instead of being passed to the ndarray constructor."""
+        case = make_case(expected=((np.array([1, 2, 3]),), {}))
+        assert assertions.equal_contents(case, (([1, 2, 3],), {}, 0.0))[0] is pytest.ExitCode.OK
+        assert assertions.equal_contents(case, (([1, 2, 4],), {}, 0.0))[0] is pytest.ExitCode.TESTS_FAILED
+
+    def test_missing_name_fails(self):
+        """A variable the student did not define is a failure."""
+        case = make_case(expected=((), {"b": [1]}))
+        result, _ = assertions.equal_contents(case, ((), {}, 0.0), "b")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+
+class TestAttributeAssertionsHarnessShape:
+    """close_attributes and equal_attributes with the outputs the harness produces."""
+
+    def test_close_attributes_harness_shape(self):
+        """close_attributes compares outputs[0] with case.expected[0] objects."""
+        case = make_case(expected=((_Obj(x=1.0, y=2.0),), {}))
+        outputs = ((_Obj(x=1.0 + 1e-9, y=2.0),), {}, 0.0)
+        result, _ = assertions.close_attributes(case, outputs, "x", "y")
+        assert result is pytest.ExitCode.OK
+
+    def test_close_attributes_harness_shape_mismatch(self):
+        """close_attributes fails for a wrong attribute in harness-shaped data."""
+        case = make_case(expected=((_Obj(x=1.0),), {}))
+        result, _ = assertions.close_attributes(case, ((_Obj(x=2.0),), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_close_attributes_bare_instance_tuple_expected(self):
+        """A custom harness may pass a bare instance while case.expected holds the expected object."""
+        case = make_case(expected=((_Obj(radius=1.0),), {}))
+        result, _ = assertions.close_attributes(case, _Obj(radius=1.0), "radius")
+        assert result is pytest.ExitCode.OK
+
+    def test_close_attributes_missing_attribute(self):
+        """A missing attribute is a failure, not an internal error."""
+        case = make_case(expected=((_Obj(x=1.0),), {}))
+        result, _ = assertions.close_attributes(case, ((_Obj(),), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_close_attributes_no_objects(self):
+        """No objects at all is a failure, not a vacuous pass."""
+        result, _ = assertions.close_attributes(make_case(), ((), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_equal_attributes_checks_every_instance(self):
+        """A wrong second instance fails."""
+        case = make_case(expected=((_Obj(x=1), _Obj(x=3)), {}))
+        result, _ = assertions.equal_attributes(case, ((_Obj(x=1), _Obj(x=-999)), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_equal_attributes_instance_count_mismatch(self):
+        """More instances than expected objects fail."""
+        case = make_case(expected=((_Obj(x=1),), {}))
+        result, _ = assertions.equal_attributes(case, ((_Obj(x=1), _Obj(x=1)), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_equal_attributes_no_expected_object(self):
+        """expected=((), {}) fails instead of raising IndexError."""
+        result, _ = assertions.equal_attributes(make_case(), ((_Obj(x=1),), {}, 0.0), "x")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_equal_attributes_attribute_missing_everywhere(self):
+        """A (misspelled) attribute missing on both objects fails instead of passing."""
+        case = make_case(expected=((_Obj(x=1),), {}))
+        result, _ = assertions.equal_attributes(case, ((_Obj(x=999),), {}, 0.0), "X")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_equal_attributes_numpy(self):
+        """Array attributes are compared instead of raising."""
+        case = make_case(expected=((_Obj(a=np.arange(3)),), {}))
+        assert assertions.equal_attributes(case, ((_Obj(a=np.arange(3)),), {}, 0.0), "a")[0] is pytest.ExitCode.OK
+        assert assertions.equal_attributes(case, ((_Obj(a=np.arange(1, 4)),), {}, 0.0), "a")[0] is pytest.ExitCode.TESTS_FAILED
+
+
+class TestTimeBoundsRegressions:
+    """Inclusive, None-aware time bounds."""
+
+    def test_zero_elapsed_without_bounds(self):
+        """Elapsed time 0.0 passes when no bounds are given."""
+        result, _ = assertions.time_bounds(make_case(), ((), {}, 0.0))
+        assert result is pytest.ExitCode.OK
+
+    def test_bounds_are_inclusive(self):
+        """Elapsed times equal to a bound pass."""
+        case = make_case(timing=(0.5, 1.0))
+        assert assertions.time_bounds(case, ((), {}, 0.5))[0] is pytest.ExitCode.OK
+        assert assertions.time_bounds(case, ((), {}, 1.0))[0] is pytest.ExitCode.OK
+
+    def test_zero_upper_bound_is_a_bound(self):
+        """An upper bound of 0 is not treated as unbounded."""
+        result, _ = assertions.time_bounds(make_case(timing=(None, 0.0)), ((), {}, 5.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+
+class TestMissingThingsFail:
+    """Missing names, attributes and files are failures, not internal errors."""
+
+    def test_equal_types_missing_name(self):
+        """equal_types fails for an undefined variable."""
+        result, _ = assertions.equal_types(make_case(expected=((), {"b": 1})), ((), {}, 0.0), "b")
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_has_method_missing_typed_attribute(self):
+        """has_method fails for a missing attribute with a type hint."""
+        result, _ = assertions.has_method(make_case(), ((_Obj(),), {}, 0.0), x=float)
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+    def test_file_contents_missing_file(self, tmp_path, monkeypatch):
+        """file_contents fails for a file that was never written."""
+        monkeypatch.chdir(tmp_path)
+        result, message = assertions.file_contents(make_case(expected=((), {"out.txt": b"x"})), ((), {}, 0.0))
+        assert result is pytest.ExitCode.TESTS_FAILED
+        assert "not found" in message
+
+    def test_calls_missing_callee(self):
+        """The calls assertion fails for a missing callee."""
+
+        class Module:
+            @staticmethod
+            def main():
+                return None
+
+        result, _ = assertions.calls(make_case(), ((Module,), {}, 0.0), "main", helper=[((1,), {})])
+        assert result is pytest.ExitCode.TESTS_FAILED
+
+
+class TestHasImportRegressions:
+    """has_import positional paths and undefined names."""
+
+    def test_positional_module_import(self, tmp_path, monkeypatch):
+        """A positional path checks for ``import <stem>`` from that file."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "helperlib.py").write_text("VALUE = 1\n")
+        spec = importlib.util.spec_from_file_location("helperlib", tmp_path / "helperlib.py")
+        helperlib = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helperlib)
+
+        outputs = ((_Obj(helperlib=helperlib),), {}, 0.0)
+        assert assertions.has_import(make_case(), outputs, pathlib.Path("helperlib.py"))[0] is pytest.ExitCode.OK
+        assert assertions.has_import(make_case(), ((_Obj(),), {}, 0.0), pathlib.Path("helperlib.py"))[0] is pytest.ExitCode.TESTS_FAILED
+
+    def test_undefined_name_fails(self):
+        """A name the module does not define fails instead of raising AttributeError."""
+        result, _ = assertions.has_import(make_case(), ((_Obj(),), {}, 0.0), foo=pathlib.Path("x.py"))
         assert result is pytest.ExitCode.TESTS_FAILED

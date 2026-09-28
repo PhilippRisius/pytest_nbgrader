@@ -1,9 +1,21 @@
 """Tests for loader.py — Submission.submit() dispatch paths and print output."""
 
+import __future__
+import functools
 import importlib.machinery
 import types
 
+import pytest
+
 from pytest_nbgrader.loader import Submission
+
+
+@pytest.fixture(autouse=True)
+def _restore_submission():
+    """Save and restore Submission.submission around each test."""
+    saved = Submission.submission
+    yield
+    Submission.submission = saved
 
 
 class TestSubmitPath:
@@ -94,3 +106,44 @@ class TestSubmitGeneric:
         """submit(str) returns compiled CodeType."""
         result = Submission.submit("y = 2")
         assert isinstance(result, types.CodeType)
+
+
+class TestSubmitRegressions:
+    """Failed submissions, callables and paths."""
+
+    def test_failed_submit_clears_previous(self):
+        """A submission that fails to compile does not leave the previous one in place."""
+        Submission.submit("result = 1")
+        with pytest.raises(SyntaxError):
+            Submission.submit("result = +* 1")
+        assert Submission.submission is None
+
+    def test_code_does_not_inherit_future_flags(self):
+        """Student code is compiled with its own __future__ flags, not the loader's."""
+        code = Submission.submit("x: int = 5")
+        assert not code.co_flags & __future__.annotations.compiler_flag
+
+    def test_callable_without_source(self, capsys):
+        """Callables without retrievable source are stored and shown by repr."""
+        submission = functools.partial(pow, 2)
+        assert Submission.submit(submission) is submission
+        assert "functools.partial" in capsys.readouterr().out
+
+    def test_generic_submission_is_returned(self):
+        """The generic branch returns the stored submission like the others."""
+        assert Submission.submit(42) == 42
+
+    def test_non_python_path_raises(self, tmp_path):
+        """A path that cannot be imported raises instead of storing None silently."""
+        path = tmp_path / "notes.txt"
+        path.write_text("x = 1\n")
+        with pytest.raises(ValueError, match="cannot be imported"):
+            Submission.submit(path)
+        assert Submission.submission is None
+
+    def test_path_read_as_utf8(self, tmp_path, capsys):
+        """Module source is read as UTF-8 (the encoding of Python source files)."""
+        path = tmp_path / "sol.py"
+        path.write_text("# Grüße\nx = 1\n", encoding="utf-8")
+        Submission.submit(path)
+        assert "Grüße" in capsys.readouterr().out
